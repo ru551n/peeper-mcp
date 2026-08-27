@@ -9,11 +9,14 @@ The only server state is a small LRU of open files (see
 from __future__ import annotations
 
 import os
+import re
+from typing import Literal
 
+import numpy as np
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from waver_mcp.analyze import analyze
+from waver_mcp.analyze import analyze, rising_edges, value_runs
 from waver_mcp.formatting import format_value
 from waver_mcp.store import (
     AmbiguousSignal,
@@ -304,8 +307,249 @@ def waver_analyze(
     return "\n".join([*header, body])
 
 
+@mcp.tool(annotations=_RO)
+def waver_latency(
+    file: str,
+    a: str,
+    b: str,
+    edge: Literal["rise", "any"] = "rise",
+    start: str | int = "0",
+    end: str | int | None = None,
+) -> str:
+    """How long from A's edge to B's edge?
+
+    Answers "what's the propagation delay from <a> to <b>?", "how long
+    after <a>'s rising edge does <b> rise?". For every edge of A in
+    [start, end) it finds the first edge of B at or after that moment and
+    reports min/max/mean/p50/stddev over all such pairs, plus the first
+    and last pairs. edge='rise' needs both signals to be binary (0/1);
+    use edge='any' for any change. Times are human-readable or ticks.
+    For one signal's own timing use waver_analyze.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    try:
+        ra, rb = f.resolve(a), f.resolve(b)
+        ia, ib = ra.signal, rb.signal
+        start_t = _ticks(f, start)
+        end_t = None if end is None else _ticks(f, end)
+        if end_t is not None and end_t <= start_t:
+            return (
+                f"window is empty: end ({_tm(f, end_t)}) "
+                f"must be after start ({_tm(f, start_t)})"
+            )
+        end_label = _tm(f, end_t) if end_t is not None else "end of file"
+        pa, pb = f.packed(ia.full_name), f.packed(ib.full_name)
+        ta, va = f.window(ia.full_name, start_t, end_t)
+        tb, vb = f.window(ib.full_name, start_t, end_t)
+        ea_name = "rising edges"
+        if edge == "rise":
+            for name, kind, values, full in (
+                (a, pa.kind, va, ia.full_name),
+                (b, pb.kind, vb, ib.full_name),
+            ):
+                if kind != "int" or not bool(
+                    (len(values) == 0) or np.all((values >= 0) & (values <= 1))
+                ):
+                    return (
+                        f"edge='rise' needs binary (0/1) signals; {full}"
+                        f" (from {name!r}) is not — use edge='any'"
+                    )
+            ea = rising_edges(ta, va, int(f.value_at(ia.full_name, start_t)), start_t)
+            eb = rising_edges(tb, vb, int(f.value_at(ib.full_name, start_t)), start_t)
+        else:
+            ea, eb, ea_name = ta, tb, "edges"
+        if len(ea) == 0:
+            return (
+                f"file:     {f.path}\n"
+                f"window:   [{_tm(f, start_t)}, {end_label})\n"
+                f"no {ea_name} on {ia.full_name} in this window"
+            )
+        if len(eb) == 0:
+            return (
+                f"file:     {f.path}\n"
+                f"window:   [{_tm(f, start_t)}, {end_label})\n"
+                f"no {ea_name} on {ib.full_name} in this window"
+            )
+        idx = np.searchsorted(eb, ea, side="left")
+        matched = idx < len(eb)
+        if not matched.any():
+            return (
+                f"file:     {f.path}\n"
+                f"window:   [{_tm(f, start_t)}, {end_label})\n"
+                f"no matched pairs — {ib.full_name} has no {ea_name}"
+                f" at or after {ia.full_name}'s edges in this window"
+            )
+        ae, be = ea[matched], eb[idx[matched]]
+        deltas = be - ae
+        unmatched = int((~matched).sum())
+
+        def fmt(t: np.number | float) -> str:
+            return _tm(f, _round_sig3(round(float(t))))
+
+        lines = [
+            f"file:     {f.path}",
+            f"a:        {ia.full_name} ({len(ea)} {ea_name})",
+            f"b:        {ib.full_name} ({len(eb)} {ea_name})",
+            f"window:   [{_tm(f, start_t)}, {end_label})",
+            f"pairs:    {len(deltas)} (each a edge -> first b edge at/after it)"
+            + (f"; {unmatched} a edges unmatched (b quiet)" if unmatched else ""),
+            f"min:      {fmt(deltas.min())}",
+            f"max:      {fmt(deltas.max())}",
+            f"mean:     {fmt(deltas.mean())}",
+            f"p50:      {fmt(np.percentile(deltas, 50))}",
+            f"stddev:   {fmt(deltas.std())}",
+        ]
+        if len(deltas) > 5:
+            lines.append("first:")
+            lines += [
+                f"  a@{_tm(f, int(x))} -> b@{_tm(f, int(y))} ({fmt(d)})"
+                for x, y, d in zip(ae[:3], be[:3], deltas[:3], strict=True)
+            ]
+            lines.append("last:")
+            lines += [
+                f"  a@{_tm(f, int(x))} -> b@{_tm(f, int(y))} ({fmt(d)})"
+                for x, y, d in zip(ae[-2:], be[-2:], deltas[-2:], strict=True)
+            ]
+        else:
+            lines.append("pairs:")
+            lines += [
+                f"  a@{_tm(f, int(x))} -> b@{_tm(f, int(y))} ({fmt(d)})"
+                for x, y, d in zip(ae, be, deltas, strict=True)
+            ]
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        return str(exc)
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_RO)
+def waver_find(
+    file: str, signal: str, value: str | int, start: str | int = "0", limit: int = 100
+) -> str:
+    """When was the signal equal to this value?
+
+    Answers "when did <signal> become <value>?", "when is the bus in X?",
+    "when does the FSM enter <state>?". Int signals take decimal or hex
+    ('0x1f'); string/enum signals match case-insensitively; on logic
+    vectors 'x' or 'z' matches an all-X/all-Z bus. Returns each interval
+    the value is held, with its duration, from `start` onwards. For a
+    single time point use waver_value_at; for statistics use
+    waver_analyze.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    try:
+        res = f.resolve(signal)
+        info = res.signal
+        start_t = _ticks(f, start)
+        target = _parse_target(value, info)
+        target_text = _fmt_value(info, target)
+        duration = f.duration()
+        if start_t >= duration:
+            return (
+                f"file:     {f.path}\n"
+                f"signal:   {info.full_name}\n"
+                f"value:    {target_text}\n"
+                f"matches:  0 — start ({_tm(f, start_t)}) is beyond the"
+                f" end of the file (at {_tm(f, duration)})"
+            )
+        packed = f.packed(info.full_name)
+        i = int(np.searchsorted(packed.times, start_t, side="left"))
+        times_win = packed.times[i:]
+        entering = f.value_at(info.full_name, start_t)
+        if len(times_win) == 0:
+            held_text = _fmt_value(info, entering)
+            if _value_eq(entering, target):
+                return (
+                    f"file:     {f.path}\n"
+                    f"signal:   {info.full_name}\n"
+                    f"value:    {target_text}\n"
+                    f"matches:  1 — held from {_tm(f, start_t)} to end of"
+                    f" file (held for {_tm(f, duration - start_t)})"
+                )
+            return (
+                f"file:     {f.path}\n"
+                f"signal:   {info.full_name}\n"
+                f"value:    {target_text}\n"
+                f"matches:  0 — the signal held {held_text} throughout"
+                f" (no changes after {_tm(f, start_t)})"
+            )
+        run_times, run_values, run_len = value_runs(
+            times_win, packed.values[i:], entering, start_t, duration
+        )
+        matches = [
+            (rt, rl)
+            for rt, rv, rl in zip(run_times, run_values, run_len, strict=True)
+            if rl > 0 and _value_eq(rv, target)
+        ]
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        return str(exc)
+    header = [
+        f"file:     {f.path}",
+        f"signal:   {info.full_name}" + (f"  (matched {signal!r})" if res.note else ""),
+        f"value:    {target_text}",
+    ]
+    if not matches:
+        distinct: dict[object, int] = {}
+        for rv in run_values:
+            distinct[rv] = distinct.get(rv, 0) + 1
+        top = sorted(distinct.items(), key=lambda kv: -kv[1])[:5]
+        hint = ", ".join(f"{_fmt_value(info, v)} ({n}x)" for v, n in top)
+        return "\n".join(
+            [
+                *header,
+                "matches:  0",
+                f"the signal took these values after {_tm(f, start_t)}: {hint}",
+            ]
+        )
+    shown = min(len(matches), max(limit, 1))
+    lines = [
+        *header,
+        f"matches:  {len(matches)}"
+        + (f" (showing {shown})" if shown < len(matches) else ""),
+    ]
+    lines += [f"  {_tm(f, rt)}  held for {_tm(f, rl)}" for rt, rl in matches[:shown]]
+    if shown < len(matches):
+        lines.append(
+            f"truncated after {shown} — narrow with start='...' or raise limit"
+        )
+    return "\n".join(lines)
+
+
 def _fmt_value(info: SignalInfo, value: object) -> str:
     return format_value(value, info.bitwidth)
+
+
+_INT_RE = re.compile(r"-?\d+")
+
+
+def _parse_target(value: str | int, info: SignalInfo) -> int | str:
+    """Parse a waver_find target: int stays int, hex/decimal strings
+    become ints, everything else stays a string. 'x'/'z' on a logic
+    vector expands to the full-width all-X/all-Z pattern."""
+    if isinstance(value, int):
+        return value
+    s = value.strip()
+    if s.lower().startswith("0x"):
+        try:
+            return int(s, 16)
+        except ValueError:
+            return s
+    if _INT_RE.fullmatch(s):
+        return int(s)
+    if s.lower() in ("x", "z") and info.is_bit_vector and info.bitwidth:
+        return s * info.bitwidth
+    return s
+
+
+def _value_eq(actual: object, target: object) -> bool:
+    if isinstance(target, int):
+        return isinstance(actual, int) and actual == target
+    return isinstance(actual, str) and actual.lower() == str(target).lower()
 
 
 def _ticks(f: WaveformFile, value: str | int) -> int:
@@ -314,6 +558,20 @@ def _ticks(f: WaveformFile, value: str | int) -> int:
 
 def _tm(f: WaveformFile, ticks: int) -> str:
     return format_ticks(ticks, f.ticks_per_second)
+
+
+def _round_sig3(ticks: int) -> int:
+    """Round ticks to 3 significant figures for statistics display.
+
+    A min/mean/stddev of deltas can carry as many digits as the file's
+    timescale; rounding keeps statistics readable. Exact tick values
+    (timestamps, individual intervals) are left untouched.
+    """
+    if ticks <= 0:
+        return 0
+    magnitude: int = 10 ** max(len(str(ticks)) - 3, 0)  # mypy 2 types ** as Any
+    # Integer round-half-up to the nearest multiple of `magnitude`.
+    return ((ticks + magnitude // 2) // magnitude) * magnitude
 
 
 def main() -> None:

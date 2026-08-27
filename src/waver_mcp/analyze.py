@@ -60,6 +60,30 @@ def _prepend_entering(times: np.ndarray, window_start: int) -> bool:
     return len(times) == 0 or int(times[0]) > window_start
 
 
+def _run_starts(
+    times: np.ndarray, values: np.ndarray, entering: int, window_start: int
+) -> tuple[np.ndarray, np.ndarray]:
+    if _prepend_entering(times, window_start):
+        run_times = np.concatenate((np.array([window_start], dtype=np.int64), times))
+        run_values = np.concatenate((np.array([entering], dtype=np.int64), values))
+    else:
+        # First change is at window_start; it *is* the entering value.
+        run_times = times
+        run_values = values
+    return run_times, run_values
+
+
+def rising_edges(
+    times: np.ndarray, values: np.ndarray, entering: int, window_start: int
+) -> np.ndarray:
+    """Times of 0→1 transitions within the window (binary signals)."""
+    run_times, run_values = _run_starts(times, values, entering, window_start)
+    if len(run_values) < 2:
+        return np.array([], dtype=np.int64)
+    mask = (run_values[1:] == 1) & (run_values[:-1] == 0)
+    return np.asarray(run_times[1:][mask], dtype=np.int64)
+
+
 def _runs(
     times: np.ndarray,
     values: np.ndarray,
@@ -68,13 +92,7 @@ def _runs(
     window_end: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(run_start_times, run_values, run_durations) as int64 arrays."""
-    if _prepend_entering(times, window_start):
-        run_times = np.concatenate((np.array([window_start], dtype=np.int64), times))
-        run_values = np.concatenate((np.array([entering], dtype=np.int64), values))
-    else:
-        # First change is at window_start; it *is* the entering value.
-        run_times = times
-        run_values = values
+    run_times, run_values = _run_starts(times, values, entering, window_start)
     run_len = np.diff(run_times)
     # Tail: no changes -> entering held for the whole window; otherwise the
     # last value is held to the window end.
@@ -84,6 +102,28 @@ def _runs(
         else np.array([window_end - int(times[-1])], dtype=np.int64)
     )
     run_len = np.concatenate((run_len, tail))
+    return run_times, run_values, run_len
+
+
+def value_runs(
+    times: np.ndarray,
+    values: np.ndarray,
+    entering: object,
+    window_start: int,
+    window_end: int,
+) -> tuple[list[int], list[object], list[int]]:
+    """(run_start_times, run_values, run_durations) for mixed-type values."""
+    vals: list[object] = values.tolist()
+    if _prepend_entering(times, window_start):
+        run_values: list[object] = [entering, *vals]
+        run_times: list[int] = [window_start, *(int(t) for t in times)]
+    else:
+        run_values = list(vals)
+        run_times = [int(t) for t in times]
+    run_len: list[int] = [
+        run_times[i + 1] - run_times[i] for i in range(len(run_times) - 1)
+    ]
+    run_len.append(window_end - run_times[-1])
     return run_times, run_values, run_len
 
 
@@ -185,17 +225,9 @@ def analyze(
 
     # General path: wide vectors (incl. X/Z), reals, enums-as-strings,
     # character strings.
-    vals: list[object] = values.tolist()
-    if _prepend_entering(times, window_start):
-        run_values: list[object] = [entering, *vals]
-        run_times: list[int] = [window_start, *(int(t) for t in times)]
-    else:
-        run_values = list(vals)
-        run_times = [int(t) for t in times]
-    run_len: list[int] = [
-        run_times[i + 1] - run_times[i] for i in range(len(run_times) - 1)
-    ]
-    run_len.append(window_end - run_times[-1])
+    _, run_values, run_len = value_runs(
+        times, values, entering, window_start, window_end
+    )
 
     is_logic = (is_1bit or is_bit_vector) and not is_real and kind != "float"
     if is_logic and kind == "str":  # X/Z only possible in pattern strings

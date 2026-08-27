@@ -66,6 +66,8 @@ class SignalInfo:
     bitwidth: int | None
     is_real: bool
     is_string: bool
+    is_1bit: bool
+    is_bit_vector: bool
     components: tuple[str, ...]
 
 
@@ -157,6 +159,8 @@ class WaveformFile:
                     bitwidth=var.bitwidth,
                     is_real=var.is_real,
                     is_string=var.is_string,
+                    is_1bit=var.is_1bit,
+                    is_bit_vector=var.is_bit_vector,
                     components=tuple(var.full_name.lower().split(".")),
                 )
             )

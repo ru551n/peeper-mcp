@@ -27,6 +27,8 @@ def make_info(full_name: str) -> SignalInfo:
         bitwidth=1,
         is_real=False,
         is_string=False,
+        is_1bit=True,
+        is_bit_vector=False,
         components=tuple(full_name.lower().split(".")),
     )
 

@@ -13,6 +13,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from waver_mcp.analyze import analyze
 from waver_mcp.formatting import format_value
 from waver_mcp.store import (
     AmbiguousSignal,
@@ -230,6 +231,77 @@ def waver_value_at(file: str, time: str | int, signals: list[str]) -> str:
     except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
         return str(exc)
     return "\n".join([f"file: {f.path}", f"time: {_tm(f, t)}", *rows])
+
+
+@mcp.tool(annotations=_RO)
+def waver_analyze(
+    file: str, signal: str, start: str | int = "0", end: str | int | None = None
+) -> str:
+    """How fast, how long, how much is this signal?
+
+    Answers "what's the period / frequency / duty cycle of <signal>?",
+    "how much time is <signal> in X/Z?", "what's the min/max/mean of this
+    real?", "which values does <signal> take and how often?". This is the
+    statistics tool: it summarizes a window instead of listing changes.
+    Times are human-readable ('10ns') or integer ticks; the window is
+    [start, end) — omit end to run to the signal's last change. For a raw
+    change list use waver_values; for edge-to-edge timing between two
+    signals use waver_latency.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    try:
+        res = f.resolve(signal)
+        info = res.signal
+        start_t = _ticks(f, start)
+        end_t = None if end is None else _ticks(f, end)
+        if end_t is not None and end_t <= start_t:
+            return (
+                f"window is empty: end ({_tm(f, end_t)}) "
+                f"must be after start ({_tm(f, start_t)})"
+            )
+        packed = f.packed(info.full_name)
+        times, values = f.window(info.full_name, start_t, end_t)
+        # Effective end: explicit end, or the signal's last change.
+        win_end = (
+            end_t if end_t is not None else int(times[-1]) if len(times) else start_t
+        )
+        # Degenerate: with an open end and nothing (or only the value at
+        # start_t) to measure, say so plainly.
+        if end_t is None and win_end <= start_t:
+            held = f.value_at(info.full_name, start_t)
+            return (
+                f"file:     {f.path}\n"
+                f"signal:   {info.full_name}\n"
+                f"window:   [{_tm(f, start_t)}, end of file)\n"
+                f"no changes after {_tm(f, start_t)} — {info.full_name}"
+                f" held {_fmt_value(info, held)} for the rest of the file"
+            )
+        entering = f.value_at(info.full_name, start_t)
+        body = analyze(
+            times,
+            values,
+            packed.kind,
+            entering,
+            start_t,
+            win_end,
+            info.bitwidth,
+            info.is_1bit,
+            info.is_bit_vector,
+            info.is_real,
+            f.ticks_per_second,
+            lambda t: _tm(f, t),
+        )
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        return str(exc)
+    header = [
+        f"file:     {f.path}",
+        f"signal:   {info.full_name}" + (f"  (matched {signal!r})" if res.note else ""),
+        f"window:   [{_tm(f, start_t)}, {_tm(f, win_end)})",
+    ]
+    return "\n".join([*header, body])
 
 
 def _fmt_value(info: SignalInfo, value: object) -> str:

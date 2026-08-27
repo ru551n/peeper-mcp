@@ -58,3 +58,19 @@ jobs:
         run: uv sync --frozen
       - name: Run tests
         run: uv run pytest -q
+
+  perf:
+    name: Performance gate
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Opt-in perf budgets (cold open < 100 ms, warm values < 20 ms, warm
+    # analyze < 50 ms on the ~400k-change bench fixture). Linux only:
+    # the budgets are calibrated on CI runners, not local machines.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run perf gate
+        run: uv run pytest -q -m perf

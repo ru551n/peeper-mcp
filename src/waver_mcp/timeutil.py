@@ -82,6 +82,20 @@ def parse_time(value: str | int, ticks_per_second: Decimal) -> int:
     return ticks
 
 
+def display_unit(ticks: int, ticks_per_second: Decimal) -> tuple[str, Decimal]:
+    """Largest display unit for which *ticks* is at least one unit wide.
+
+    ``10_000_000`` ticks of a 1 fs file is ``("ns", Decimal("1e-9"))``.
+    """
+    if ticks < 0:
+        raise TimeValueError(f"negative time: {ticks} ticks")
+    seconds = Decimal(ticks) * ticks_per_second
+    for unit, per_unit in _DISPLAY_UNITS:
+        if seconds / per_unit >= 1:
+            return unit, per_unit
+    return "fs", _SECONDS_PER_UNIT["fs"]
+
+
 def format_ticks(ticks: int, ticks_per_second: Decimal) -> str:
     """Format ticks as the largest human-readable unit with value >= 1.
 
@@ -91,12 +105,9 @@ def format_ticks(ticks: int, ticks_per_second: Decimal) -> str:
         raise TimeValueError(f"negative time: {ticks} ticks")
     if ticks == 0:
         return "0ns"
-    seconds = Decimal(ticks) * ticks_per_second
-    for unit, per_unit in _DISPLAY_UNITS:
-        amount = seconds / per_unit
-        if amount >= 1:
-            return f"{amount.normalize():f}{unit}"
-    raise AssertionError("unreachable: fs covers all positive times")
+    unit, per_unit = display_unit(ticks, ticks_per_second)
+    amount = Decimal(ticks) * ticks_per_second / per_unit
+    return f"{amount.normalize():f}{unit}"
 
 
 def ticks_per_second(factor: int, unit: str) -> Decimal:

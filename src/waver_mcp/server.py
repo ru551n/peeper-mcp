@@ -8,30 +8,59 @@ The only server state is a small LRU of open files (see
 
 from __future__ import annotations
 
+import base64
 import os
 import re
-from typing import Literal
+import tempfile
+from typing import Any, Literal
+
+import matplotlib
+
+matplotlib.use("Agg")
 
 import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from mcp.types import ImageContent, TextContent, ToolAnnotations
 
-from waver_mcp.analyze import analyze, rising_edges, value_runs
+from waver_mcp.analyze import analyze, is_xz, rising_edges, value_runs
 from waver_mcp.formatting import format_value
 from waver_mcp.store import (
     AmbiguousSignal,
     FileStore,
+    Resolution,
     SignalInfo,
     SignalNotFound,
     WaveformFile,
 )
-from waver_mcp.timeutil import TimeValueError, format_ticks, parse_time
+from waver_mcp.timeutil import (
+    TimeValueError,
+    display_unit,
+    format_ticks,
+    parse_time,
+)
 
 #: Default cap on the signal list waver_search returns without a pattern.
 MAX_SEARCH_RESULTS = int(os.environ.get("WAVE_MAX_SEARCH_RESULTS", "100"))
 
 #: Default cap on changes waver_values returns.
 MAX_ROWS = int(os.environ.get("WAVE_MAX_ROWS", "1000"))
+
+#: Max plotted points per trace; denser change lists are decimated.
+_MAX_PTS = 10_000
+
+#: Max value labels drawn on a text lane (longest runs first).
+_MAX_TEXT_LABELS = 24
+
+#: Max run boundaries drawn on a text lane before striding.
+_MAX_TEXT_RUNS_DRAWN = 2000
+
+#: Per-lane geometry for waver_plot.
+_LANE_HEIGHT = 1.0
+_LANE_GAP = 0.4
 
 _RO = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -518,6 +547,236 @@ def waver_find(
             f"truncated after {shown} — narrow with start='...' or raise limit"
         )
     return "\n".join(lines)
+
+
+def _decimate_idx(n: int) -> np.ndarray:
+    """Indices into an n-point series, keeping ~_MAX_PTS points.
+
+    Always includes the last point so the trace reaches the window end.
+    """
+    if n <= _MAX_PTS:
+        return np.arange(n)
+    stride = int(np.ceil(n / _MAX_PTS))
+    idx = np.arange(0, n, stride)
+    if idx[-1] != n - 1:
+        idx = np.append(idx, n - 1)
+    return idx
+
+
+def _draw_plot_lane(
+    ax: Axes,
+    f: WaveformFile,
+    info: SignalInfo,
+    lane_base: float,
+    start_t: int,
+    win_end: int,
+    scale: float,
+    color: tuple[float, ...],
+) -> str:
+    """Draw one signal's window in its lane; return a one-line summary."""
+    packed = f.packed(info.full_name)
+    times, values = f.window(info.full_name, start_t, win_end)
+    entering = f.value_at(info.full_name, start_t)
+    n_changes = len(times)
+    kind = packed.kind
+    wide_int = kind == "int" and (info.bitwidth or 0) > 32
+    if kind == "str" or wide_int:
+        # Text lane: held values as labels, X/Z spans shaded. String/enum
+        # signals (kind "str", possibly mixing ints with X/Z strings) and
+        # wide int buses (> 32 bit, which don't plot meaningfully as
+        # numbers) both render here.
+        run_times, run_values, run_len = value_runs(
+            times, values, entering, start_t, win_end
+        )
+        runs = [
+            (rt, rv, rl)
+            for rt, rv, rl in zip(run_times, run_values, run_len, strict=True)
+            if rl > 0
+        ]
+        stride = max(1, (len(runs) - 1) // _MAX_TEXT_RUNS_DRAWN)
+        if len(runs) > 1:
+            x_lines = (
+                np.asarray([rt for rt, _rv, _rl in runs[1::stride]], dtype=np.float64)
+                * scale
+            )
+            ax.vlines(
+                x_lines,
+                lane_base,
+                lane_base + _LANE_HEIGHT,
+                color="0.8",
+                lw=0.5,
+            )
+        xz_runs = [(rt, rv, rl) for rt, rv, rl in runs if is_xz(rv)]
+        for rt, _rv, rl in xz_runs:
+            ax.add_patch(
+                Rectangle(
+                    (rt * scale, lane_base),
+                    rl * scale,
+                    _LANE_HEIGHT,
+                    facecolor="0.9",
+                    edgecolor="none",
+                    alpha=0.9,
+                    lw=0,
+                )
+            )
+        labels = [(rt, rv, rl) for rt, rv, rl in runs if not is_xz(rv)]
+        shown = (
+            labels
+            if len(labels) <= _MAX_TEXT_LABELS
+            else sorted(labels, key=lambda r: -r[2])[:_MAX_TEXT_LABELS]
+        )
+        for rt, rv, rl in shown:
+            ax.annotate(
+                _fmt_value(info, rv),
+                xy=((rt + rl / 2) * scale, lane_base + 0.5),
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="0.1",
+            )
+        note = ""
+        if len(shown) < len(labels):
+            note = f", showing {len(shown)} of {len(labels)} labels"
+        plural = "" if len(xz_runs) == 1 else "s"
+        return f"text ({len(runs)} runs, {len(xz_runs)} x/z interval{plural}{note})"
+    x = np.concatenate((np.array([start_t], dtype=np.int64), times))
+    if kind == "int" and (info.is_1bit or (info.bitwidth or 0) <= 1):
+        y = np.concatenate((np.array([int(entering)], dtype=np.int64), values))
+        idx = _decimate_idx(len(x))
+        ax.step(
+            x[idx] * scale,
+            lane_base + y[idx],
+            where="post",
+            color=color,
+            lw=1,
+        )
+    else:
+        allv = np.concatenate((np.array([entering], dtype=values.dtype), values))
+        vmin, vmax = float(allv.min()), float(allv.max())
+        idx = _decimate_idx(len(x))
+        if vmax == vmin:
+            yplot = np.full(len(idx), lane_base + 0.5)
+        else:
+            yplot = lane_base + (allv[idx] - vmin) / (vmax - vmin)
+        ax.plot(x[idx] * scale, yplot, color=color, lw=0.8)
+    dec = f", decimated to {len(idx)} points" if len(idx) < n_changes else ""
+    lane = (
+        "binary"
+        if kind == "int" and (info.is_1bit or (info.bitwidth or 0) <= 1)
+        else "numeric"
+    )
+    return f"{lane} ({n_changes} changes{dec})"
+
+
+@mcp.tool(annotations=_RO)
+def waver_plot(
+    file: str,
+    signals: list[str],
+    start: str | int = "0",
+    end: str | int | None = None,
+) -> Any:
+    """Show me the waveforms: a PNG plot of these signals in this window.
+
+    Answers "show me <signal(s)> around time A" / "what does the bus look
+    like here?". One lane per signal: binary signals step between 0 and 1,
+    small numeric signals draw as a line, and wide buses plus string/enum
+    signals show their held values as text labels with X/Z spans shaded.
+    Times are human-readable ('10ns', '1.5us') or integer file ticks; the
+    window is [start, end) — omit end to run to the end of the file.
+    Dense signals are decimated to ~10000 points so large files stay fast.
+    Returns the plot as an image plus a text summary; the PNG is also
+    written to a temp file whose path is in the summary. For statistics
+    use waver_analyze; for exact values use waver_values.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    if not signals:
+        return "no signals given — pass at least one signal name"
+    fig: Figure | None = None
+    try:
+        start_t = _ticks(f, start)
+        end_t = None if end is None else _ticks(f, end)
+        duration = f.duration()
+        if end_t is not None and end_t <= start_t:
+            return (
+                f"window is empty: end ({_tm(f, end_t)}) "
+                f"must be after start ({_tm(f, start_t)})"
+            )
+        if end_t is None and start_t >= duration:
+            return (
+                f"window is empty: start ({_tm(f, start_t)}) is beyond the"
+                f" end of the file (at {_tm(f, duration)})"
+            )
+        win_end = end_t if end_t is not None else duration
+        resolved: list[Resolution] = []
+        seen: set[str] = set()
+        for name in signals:
+            res = f.resolve(name)
+            if res.signal.full_name not in seen:
+                seen.add(res.signal.full_name)
+                resolved.append(res)
+        unit, per_unit = display_unit(duration, f.ticks_per_second)
+        scale = float(f.ticks_per_second / per_unit)
+        n = len(resolved)
+        fig, ax = plt.subplots(figsize=(10, 0.9 * n + 1.4))
+        ax.set_xlim(start_t * scale, win_end * scale)
+        summaries: list[str] = []
+        for i, res in enumerate(resolved):
+            color = plt.cm.tab10(i % 10)
+            summaries.append(
+                _draw_plot_lane(
+                    ax,
+                    f,
+                    res.signal,
+                    i * (_LANE_HEIGHT + _LANE_GAP),
+                    start_t,
+                    win_end,
+                    scale,
+                    color,
+                )
+            )
+        ax.set_yticks([i * (_LANE_HEIGHT + _LANE_GAP) + 0.5 for i in range(n)])
+        ax.set_yticklabels([res.signal.leaf for res in resolved])
+        ax.set_ylim(-0.2, (n - 1) * (_LANE_HEIGHT + _LANE_GAP) + _LANE_HEIGHT + 0.2)
+        ax.set_xlabel(f"time ({unit})")
+        ax.set_title(
+            f"{os.path.basename(f.path)}   [{_tm(f, start_t)}, {_tm(f, win_end)})"
+        )
+        ax.grid(axis="x", linewidth=0.3, alpha=0.4)
+        fd, png_path = tempfile.mkstemp(prefix="waver-plot-", suffix=".png")
+        os.close(fd)
+        fig.savefig(png_path, format="png", dpi=100, bbox_inches="tight")
+        plt.close(fig)
+        fig = None
+        with open(png_path, "rb") as fh:
+            png_bytes = fh.read()
+        lines = [
+            f"file:     {f.path}",
+            f"window:   [{_tm(f, start_t)}, {_tm(f, win_end)})",
+            f"image:    {png_path}",
+            f"traces:   {n}",
+        ]
+        for res, summary in zip(resolved, summaries, strict=True):
+            note = f"  (matched {res.signal.leaf!r})" if res.note else ""
+            lines.append(f"  {res.signal.full_name}{note}  {summary}")
+        lines.append(
+            "stats: waver_analyze; exact values: waver_values; narrow the"
+            " window to read dense labels"
+        )
+        return (
+            TextContent(type="text", text="\n".join(lines)),
+            ImageContent(
+                type="image",
+                data=base64.b64encode(png_bytes).decode(),
+                mimeType="image/png",
+            ),
+        )
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        if fig is not None:
+            plt.close(fig)
+        return str(exc)
 
 
 def _fmt_value(info: SignalInfo, value: object) -> str:

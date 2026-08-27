@@ -25,7 +25,8 @@ _XZ_RE = re.compile(r"[01xz_]+", re.IGNORECASE)
 _TOP_VALUES = 10
 
 
-def _is_xz(value: object) -> bool:
+def is_xz(value: object) -> bool:
+    """True if *value* is an X/Z (or 0/1/X/Z mixed) bit pattern string."""
     return isinstance(value, str) and _XZ_RE.fullmatch(value) is not None
 
 
@@ -231,8 +232,8 @@ def analyze(
 
     is_logic = (is_1bit or is_bit_vector) and not is_real and kind != "float"
     if is_logic and kind == "str":  # X/Z only possible in pattern strings
-        xz_total = sum(run_len[i] for i, v in enumerate(run_values) if _is_xz(v))
-        xz_count = sum(1 for v in run_values if _is_xz(v))
+        xz_total = sum(run_len[i] for i, v in enumerate(run_values) if is_xz(v))
+        xz_count = sum(1 for v in run_values if is_xz(v))
         if xz_total > 0:
             unit = " interval" if xz_count == 1 else " intervals"
             lines.append(

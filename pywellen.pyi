@@ -31,7 +31,7 @@ class Var:
     vhdl_type_name: str
     enum_type: str | None
     direction: str
-    bitwidth: int
+    bitwidth: int | None
     size: int
     is_1bit: bool
     is_bit_vector: bool

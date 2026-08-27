@@ -1,0 +1,67 @@
+"""Tests for the waver_* MCP tools (called directly, no protocol)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from waver_mcp.server import mcp, waver_open, waver_search
+
+
+class TestWaverOpen:
+    def test_output(self, all_types_path: Path) -> None:
+        out = waver_open(str(all_types_path))
+        assert f"file:      {all_types_path}" in out
+        assert "format:    FST" in out
+        assert "nvc" in out
+        assert "timescale: 1fs per tick" in out
+        assert "duration:  995ns" in out
+        assert "signals:   7" in out
+
+    def test_bench_duration(self, bench_path: Path) -> None:
+        out = waver_open(str(bench_path))
+        assert "duration:  2ms" in out
+
+    def test_missing_file(self) -> None:
+        assert "not found" in waver_open("/nonexistent/x.fst")
+
+
+class TestWaverSearch:
+    def test_lists_all(self, all_types_path: Path) -> None:
+        out = waver_search(str(all_types_path))
+        assert "signals: 7" in out
+        assert "tb_wave.clk" in out
+        real_line = next(line for line in out.splitlines() if "real_sig" in line)
+        assert "real" in real_line
+
+    def test_pattern_case_insensitive(self, all_types_path: Path) -> None:
+        out = waver_search(str(all_types_path), pattern="STATE")
+        assert "signals: 1" in out
+        assert "tb_wave.state" in out
+
+    def test_pattern_no_match(self, all_types_path: Path) -> None:
+        out = waver_search(str(all_types_path), pattern="zzz")
+        assert "signals: 0" in out
+        assert "no signal name contains 'zzz'" in out
+
+    def test_limit(self, all_types_path: Path) -> None:
+        out = waver_search(str(all_types_path), limit=2)
+        assert "signals: 7" in out
+        assert "showing 2" in out
+        assert sum(line.startswith("  tb_") for line in out.splitlines()) == 2
+
+    def test_missing_file(self) -> None:
+        assert "not found" in waver_search("/nonexistent/x.fst")
+
+
+class TestServer:
+    async def test_tools_registered_readonly(self) -> None:
+        tools = await mcp.list_tools()
+        names = {t.name for t in tools}
+        assert {"waver_open", "waver_search"} <= names
+        for tool in tools:
+            assert tool.annotations is not None
+            assert tool.annotations.readOnlyHint is True
+
+    def test_instructions_mention_open_first(self) -> None:
+        assert mcp.instructions is not None
+        assert "waver_open" in mcp.instructions

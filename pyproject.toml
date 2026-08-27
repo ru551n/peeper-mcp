@@ -22,6 +22,9 @@ dependencies = [
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+waver-mcp = "waver_mcp.server:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

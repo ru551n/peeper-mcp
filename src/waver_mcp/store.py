@@ -63,7 +63,7 @@ class SignalInfo:
     full_name: str
     leaf: str
     var_type: str
-    bitwidth: int
+    bitwidth: int | None
     is_real: bool
     is_string: bool
     components: tuple[str, ...]

@@ -57,6 +57,11 @@ select = [
     "RUF",
 ]
 
+[tool.ruff.lint.isort]
+# The pywellen.pyi stub at the repo root would otherwise make ruff treat
+# the installed pywellen package as first-party.
+known-third-party = ["pywellen"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

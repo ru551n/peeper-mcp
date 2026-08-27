@@ -13,11 +13,21 @@ import os
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from waver_mcp.store import FileStore
-from waver_mcp.timeutil import format_ticks
+from waver_mcp.formatting import format_value
+from waver_mcp.store import (
+    AmbiguousSignal,
+    FileStore,
+    SignalInfo,
+    SignalNotFound,
+    WaveformFile,
+)
+from waver_mcp.timeutil import TimeValueError, format_ticks, parse_time
 
 #: Default cap on the signal list waver_search returns without a pattern.
 MAX_SEARCH_RESULTS = int(os.environ.get("WAVE_MAX_SEARCH_RESULTS", "100"))
+
+#: Default cap on changes waver_values returns.
+MAX_ROWS = int(os.environ.get("WAVE_MAX_ROWS", "1000"))
 
 _RO = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -110,6 +120,128 @@ def waver_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) 
     if total == 0:
         lines.append(f"no signal name contains {pattern!r}")
     return "\n".join(lines)
+
+
+@mcp.tool(annotations=_RO)
+def waver_values(
+    file: str,
+    signal: str,
+    start: str | int = "0",
+    end: str | int | None = None,
+    max_changes: int = MAX_ROWS,
+) -> str:
+    """What values did this signal have in this time window?
+
+    Answers "what did <signal> do between A and B?". Times are
+    human-readable ('10ns', '1.5us') or integer file ticks; the window
+    is [start, end) — omit end to run to the signal's last change.
+    Wide (>= 32 bit) values are shown in hex; X/Z samples and enum/
+    string values are kept as-is. For statistics instead of a change
+    list, use waver_analyze; for one time point, waver_value_at.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    try:
+        res = f.resolve(signal)
+        start_t = _ticks(f, start)
+        end_t = None if end is None else _ticks(f, end)
+        if end_t is not None and end_t <= start_t:
+            return (
+                f"window is empty: end ({_tm(f, end_t)}) "
+                f"must be after start ({_tm(f, start_t)})"
+            )
+        info = res.signal
+        times, values = f.window(info.full_name, start_t, end_t)
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        return str(exc)
+
+    if end_t is not None:
+        window_text = f"[{_tm(f, start_t)}, {_tm(f, end_t)})"
+    else:
+        window_text = f"[{_tm(f, start_t)}, end of file)"
+    entering_value = _fmt_value(info, f.value_at(info.full_name, start_t))
+    header = [
+        f"file:     {f.path}",
+        f"signal:   {info.full_name}" + (f"  (matched {signal!r})" if res.note else ""),
+        f"window:   {window_text}",
+        f"entering: {entering_value} (value at window start)",
+    ]
+    if len(times) == 0:
+        held = f.value_at(info.full_name, start_t)
+        header.append(
+            f"no changes in this window — {info.full_name} held "
+            f"{_fmt_value(info, held)} throughout"
+        )
+        return "\n".join(header)
+
+    shown = min(len(times), max(max_changes, 1))
+    header.append(
+        f"changes:  {shown}"
+        + (f" of {len(times)} (truncated)" if shown < len(times) else "")
+    )
+    col = max(len(_tm(f, int(t))) for t in times[:shown])
+    lines = header + [
+        f"  {_tm(f, int(t)).ljust(col)}  {_fmt_value(info, v)}"
+        for t, v in zip(times[:shown], values[:shown], strict=True)
+    ]
+    if shown < len(times):
+        lines.append(
+            f"truncated after {shown} changes — narrow the window "
+            "(start='...' / end='...') or raise max_changes; "
+            "for statistics use waver_analyze"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_RO)
+def waver_value_at(file: str, time: str | int, signals: list[str]) -> str:
+    """What were these signals at this exact time?
+
+    Answers "what was <signal> at 10ns?" (batch: pass several signals in
+    one call). Returns the value held at that instant (the last change
+    at or before the time). Time is human-readable ('10ns') or integer
+    file ticks. If the time is past the end of the file, the last
+    recorded value is returned and flagged. For a whole window of
+    changes, use waver_values.
+    """
+    error = _open(file)
+    if error is not None:
+        return error
+    f = _STORE.open(file)
+    if not signals:
+        return "no signals given — pass at least one signal name"
+    try:
+        t = _ticks(f, time)
+        duration = f.duration()
+        rows = []
+        for name in signals:
+            res = f.resolve(name)
+            val = f.value_at(res.signal.full_name, t)
+            suffix = (
+                f"  (beyond file end at {_tm(f, duration)} — last recorded value)"
+                if t > duration
+                else ""
+            )
+            note = f"  (matched {name!r})" if res.note else ""
+            value_text = _fmt_value(res.signal, val)
+            rows.append(f"  {res.signal.full_name}{note} = {value_text}{suffix}")
+    except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:
+        return str(exc)
+    return "\n".join([f"file: {f.path}", f"time: {_tm(f, t)}", *rows])
+
+
+def _fmt_value(info: SignalInfo, value: object) -> str:
+    return format_value(value, info.bitwidth)
+
+
+def _ticks(f: WaveformFile, value: str | int) -> int:
+    return parse_time(value, f.ticks_per_second)
+
+
+def _tm(f: WaveformFile, ticks: int) -> str:
+    return format_ticks(ticks, f.ticks_per_second)
 
 
 def main() -> None:

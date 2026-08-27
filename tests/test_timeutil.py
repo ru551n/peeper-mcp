@@ -31,6 +31,9 @@ NS = ticks_per_second(1, "ns")
         ("1ps", PS, 1),
         # Zero with a unit is fine.
         ("0ns", FS, 0),
+        # Bare integer strings are file ticks (LLMs often send "0" as a str).
+        ("10", FS, 10),
+        (" 1000", FS, 1000),
     ],
 )
 def test_parse_time(value: int | str, tps: Decimal, expected: int) -> None:
@@ -51,7 +54,7 @@ def test_parse_time_micro_sign() -> None:
     ("value", "tps"),
     [
         ("abc", FS),
-        ("10", FS),  # bare string: ambiguous, must be an int for ticks
+        ("-5", FS),  # negative
         ("-5ns", FS),
         ("", FS),
         ("1.25fs", ticks_per_second(3, "fs")),  # off timescale
@@ -61,6 +64,11 @@ def test_parse_time_micro_sign() -> None:
 def test_parse_time_rejects(value: str, tps: Decimal) -> None:
     with pytest.raises(TimeValueError):
         parse_time(value, tps)
+
+
+def test_parse_time_rejects_negative_int() -> None:
+    with pytest.raises(TimeValueError):
+        parse_time(-5, FS)
 
 
 @pytest.mark.parametrize(

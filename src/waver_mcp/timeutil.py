@@ -36,6 +36,9 @@ _TIME_RE = re.compile(
     r"^\s*(\d+(?:\.\d+)?)\s*(fs|ps|ns|us|\u00b5s|ms|s)\s*$", re.IGNORECASE
 )
 
+#: Bare integer (optionally signed) = file time ticks, no unit.
+_INT_RE = re.compile(r"^\s*(-?\d+)\s*$")
+
 
 class TimeValueError(ValueError):
     """Raised for unparseable or off-timescale time values."""
@@ -44,30 +47,39 @@ class TimeValueError(ValueError):
 def parse_time(value: str | int, ticks_per_second: Decimal) -> int:
     """Convert a time to integer ticks of the file's timescale.
 
-    Integers are already ticks and pass through unchanged. Strings are
-    ``<number><unit>`` (e.g. ``"10ns"``, ``"1.5us"``, ``"2ms"``); the unit
-    may be fs, ps, ns, us (or µs), ms, or s, case-insensitively.
+    Integers and bare-integer strings (``"0"``, ``"1000"``) are file time
+    ticks. Other strings are ``<number><unit>`` (e.g. ``"10ns"``,
+    ``"1.5us"``, ``"2ms"``; unit fs, ps, ns, us/µs, ms or s,
+    case-insensitive). Negative times are rejected.
     """
     if isinstance(value, int):
-        return value
-    match = _TIME_RE.match(value)
-    if match is None:
-        raise TimeValueError(
-            f"unrecognized time {value!r}: use '<number><unit>' with "
-            "unit fs, ps, ns, us, ms, s (e.g. '10ns'), or an integer "
-            "number of file time ticks"
-        )
-    seconds = Decimal(match.group(1)) * _SECONDS_PER_UNIT[match.group(2).lower()]
-    ticks = seconds / ticks_per_second
+        ticks = value
+    else:
+        int_match = _INT_RE.match(value)
+        if int_match is not None:
+            ticks = int(int_match.group(1))
+        else:
+            match = _TIME_RE.match(value)
+            if match is None:
+                raise TimeValueError(
+                    f"unrecognized time {value!r}: use '<number><unit>' with "
+                    "unit fs, ps, ns, us, ms, s (e.g. '10ns'), or an integer "
+                    "number of file time ticks"
+                )
+            seconds = (
+                Decimal(match.group(1)) * _SECONDS_PER_UNIT[match.group(2).lower()]
+            )
+            ticks_decimal = seconds / ticks_per_second
+            rounded = ticks_decimal.to_integral_value(rounding=ROUND_HALF_UP)
+            if rounded != ticks_decimal:
+                raise TimeValueError(
+                    f"time {value!r} is not a whole number of file time ticks "
+                    f"(file timescale is {ticks_per_second} s per tick)"
+                )
+            ticks = int(rounded)
     if ticks < 0:
         raise TimeValueError(f"negative time: {value!r}")
-    rounded = ticks.to_integral_value(rounding=ROUND_HALF_UP)
-    if rounded != ticks:
-        raise TimeValueError(
-            f"time {value!r} is not a whole number of file time ticks "
-            f"(file timescale is {ticks_per_second} s per tick)"
-        )
-    return int(rounded)
+    return ticks
 
 
 def format_ticks(ticks: int, ticks_per_second: Decimal) -> str:

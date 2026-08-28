@@ -27,6 +27,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 
 from waver_mcp.analyze import analyze, is_xz, rising_edges, value_runs
+from waver_mcp.env import env_int
 from waver_mcp.formatting import format_value
 from waver_mcp.store import (
     AmbiguousSignal,
@@ -44,10 +45,10 @@ from waver_mcp.timeutil import (
 )
 
 #: Default cap on the signal list waver_search returns without a pattern.
-MAX_SEARCH_RESULTS = int(os.environ.get("WAVE_MAX_SEARCH_RESULTS", "100"))
+MAX_SEARCH_RESULTS = env_int("MAX_SEARCH_RESULTS", "100")
 
 #: Default cap on changes waver_values returns.
-MAX_ROWS = int(os.environ.get("WAVE_MAX_ROWS", "1000"))
+MAX_ROWS = env_int("MAX_ROWS", "1000")
 
 #: Max plotted points per trace; denser change lists are decimated.
 _MAX_PTS = 10_000

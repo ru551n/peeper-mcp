@@ -4,9 +4,10 @@ version = "0.1.0"
 description = "MCP server for measuring FST waveforms: signal values, period/duty, latency, event search, PNG plots"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
 dependencies = [
     # FastMCP (mcp.server.fastmcp) was removed in mcp 2.x — pin to 1.x.
-    "mcp>=1.0,<2",
+    "mcp>=1.29,<2",
     "pydantic>=2.0",
     # Rust bindings for the wellen FST/VCD reader: prebuilt wheels for
     # linux (x86_64/aarch64) and macOS (x86_64/arm64), cp3.9-cp3.15.

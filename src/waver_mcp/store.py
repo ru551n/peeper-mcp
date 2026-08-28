@@ -8,7 +8,7 @@ A :class:`WaveformFile` wraps one pywellen ``Waveform`` and exposes:
 - cheap time-based point reads (``value_at``) that skip full decoding.
 
 A :class:`FileStore` keeps an LRU of open files (bounded by
-``WAVE_MAX_FILES``).
+``WAVE_MCP_MAX_FILES``).
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from decimal import Decimal
 import numpy as np
 import pywellen
 
+from waver_mcp.env import env_int
 from waver_mcp.timeutil import TimeValueError, ticks_per_second
 
 #: Seconds-per-unit exponents pywellen may report (10**exponent seconds).
@@ -237,7 +238,7 @@ class FileStore:
     """LRU cache of open :class:`WaveformFile` objects by resolved path."""
 
     def __init__(self, max_files: int | None = None) -> None:
-        self.max_files = max_files or int(os.environ.get("WAVE_MAX_FILES", "4"))
+        self.max_files = max_files or env_int("MAX_FILES", "4")
         self._files: OrderedDict[str, WaveformFile] = OrderedDict()
 
     def open(self, path: str) -> WaveformFile:

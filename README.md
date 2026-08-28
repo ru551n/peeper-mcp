@@ -132,9 +132,12 @@ then use `"command": "waver-mcp"` in the client config.
 
 | Var | Meaning | Default |
 | --- | --- | --- |
-| `WAVE_MAX_ROWS` | default `max_changes` for `waver_values` | 1000 |
-| `WAVE_MAX_FILES` | LRU of open waveform files | 4 |
-| `WAVE_MAX_SEARCH_RESULTS` | default signal-list size for `waver_search` | 100 |
+| `WAVE_MCP_MAX_ROWS` | default `max_changes` for `waver_values` | 1000 |
+| `WAVE_MCP_MAX_FILES` | LRU of open waveform files | 4 |
+| `WAVE_MCP_MAX_SEARCH_RESULTS` | default signal-list size for `waver_search` | 100 |
+
+The original `WAVE_*` names (e.g. `WAVE_MAX_ROWS`) are still accepted as
+a deprecated fallback; `WAVE_MCP_*` wins when both are set.
 
 ## Times and signal names
 

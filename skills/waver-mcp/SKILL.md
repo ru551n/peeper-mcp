@@ -116,7 +116,10 @@ wants the image on disk.
   `waver_plot` instead.
 
 ## Configuration (env vars at server start)
-- `WAVE_MAX_ROWS` — default change rows for `waver_values` (default 1000).
-- `WAVE_MAX_FILES` — LRU of open files (default 4).
-- `WAVE_MAX_SEARCH_RESULTS` — default signal-list size for `waver_search`
+- `WAVE_MCP_MAX_ROWS` — default change rows for `waver_values` (default 1000).
+- `WAVE_MCP_MAX_FILES` — LRU of open files (default 4).
+- `WAVE_MCP_MAX_SEARCH_RESULTS` — default signal-list size for `waver_search`
   (default 100).
+
+The original `WAVE_*` names are a deprecated fallback; `WAVE_MCP_*` wins
+when both are set.

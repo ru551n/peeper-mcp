@@ -1,6 +1,6 @@
 # waver-mcp
 
-MCP server that **measures** FST waveform files — not just reads them.
+MCP server that **measures** waveform files (FST and VCD) — not just reads them.
 
 Where other waveform MCPs hand the LLM raw change tables and leave it to
 count cycles and do arithmetic, `waver-mcp` answers the question directly:
@@ -182,7 +182,10 @@ when and how to use the server: the question-framed tool table, workflows
 
 - Python >= 3.10 (CPython; pywellen has no Windows wheels, so Windows is
   not supported)
-- FST files (e.g. from `nvc -r --wave=out.fst`)
+- FST and VCD waveform files (FST e.g. from `nvc -r --wave=out.fst`, VCD e.g.
+  from `ghdl -r --stop-on-failure --wave=wave.vcd` or recorded by
+  [vunit-mcp](https://github.com/ru551n/vunit-mcp) with `waveform_format`;
+  the reader auto-detects the format)
 
 ## Development
 

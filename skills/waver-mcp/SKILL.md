@@ -1,17 +1,22 @@
+---
+name: waver-mcp
+description: Measure signal-level behavior in existing waveform files (VCD and FST) through the waver-mcp MCP server (waver_open, waver_search, waver_values, waver_value_at, waver_analyze, waver_latency, waver_find, waver_plot). Use when the user asks what a signal was doing at a time, a clock's period/duty/frequency, when a signal became a value, how long from one edge to another, the X/Z fraction, or "show me the waveform"; read-only — it never runs simulations, and it is the signal-level half of the vunit-mcp failure escalation (vunit_get_test_waveform returns the path).
+---
+
 # Waver MCP
 
 ## Overview
 Use this skill whenever the user asks about **signal-level behavior in an
-existing waveform file (FST)**: what a signal was doing at a time, a clock's
+existing waveform file (VCD or FST)**: what a signal was doing at a time, a clock's
 period/duty/frequency, when a signal became a value, how long from one
 signal's edge to another's, or "show me the waveform". The `waver-mcp` MCP
-server measures FST files through pywellen: values, statistics, latency,
+server measures VCD and FST files through pywellen: values, statistics, latency,
 event search, and PNG plots. It is read-only — it never runs simulations.
 
 Triggers on: what were the signals doing, what's the period / frequency /
 duty of, when did X become, how long is the bus in X, how long from A's edge
-to B's edge, show me the waveform, plot these signals, what's in this FST /
-waveform file, is there a signal named, what was the value at <time>,
+to B's edge, show me the waveform, plot these signals, what's in this waveform
+file, is there a signal named, what was the value at <time>,
 how much time in X / Z.
 
 Every tool takes the waveform **file path** as its first argument — there is
@@ -44,7 +49,7 @@ the end of the file (`waver_plot`) or the signal's last change
 
 ## Workflows (user request -> tool calls)
 
-**"What is in this FST / what's the timescale?"**
+**"What is in this waveform file / what's the timescale?"**
 -> `waver_open(file)`. Then `waver_search` for signal names.
 
 **"What was <signal> doing around T?"**
@@ -73,8 +78,9 @@ wants the image on disk.
    message, the failing check's sim time when it has one).
 2. If the log message already tells the whole story (e.g. a scalar
    check_equal diff), stop — no waveform needed.
-3. Otherwise `vunit_get_test_waveform(test_name=...)` — returns the FST
-   **path** and the failing check's sim time. If the run recorded no
+3. Otherwise `vunit_get_test_waveform(test_name=...)` — returns the recorded
+   waveform's **path** (VCD on GHDL, FST on NVC) and the failing check's sim
+   time. If the run recorded no
    waveform, re-running with `waveform_format` is vunit-mcp's job, not
    waver's.
 4. `waver_open(path)` -> `waver_values` / `waver_find` / `waver_analyze`
@@ -82,7 +88,8 @@ wants the image on disk.
    confirmation.
 
 ## Use / don't use
-- USE for signal-level questions about an **existing** FST: values, timing,
+- USE for signal-level questions about an **existing** waveform file
+  (VCD or FST): values, timing,
   statistics, "when did X happen", plots — especially as the signal-level
   half of the VUnit failure escalation above.
 - DON'T USE when:
@@ -93,7 +100,8 @@ wants the image on disk.
     vunit-mcp's job;
   - the user wants to change or re-run something — that is vunit-mcp;
   - "which tests failed" -> `vunit_get_report`;
-  - the file is not FST or is unreadable: `waver_open` fails clearly — say
+  - the file is not a readable VCD/FST waveform (or is otherwise
+    unreadable): `waver_open` fails clearly — say
     so and stop. Do not loop, and do not try to decode the file by hand.
 
 ## Rules of thumb

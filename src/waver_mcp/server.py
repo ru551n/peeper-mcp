@@ -1,4 +1,4 @@
-"""FastMCP server exposing the waver_* FST measurement tools.
+"""FastMCP server exposing the waver_* waveform (VCD/FST) measurement tools.
 
 The server is stateless from the caller's point of view: every tool takes
 the waveform file path, and results never depend on a "current file".
@@ -70,7 +70,7 @@ _STORE = FileStore()
 mcp = FastMCP(
     "waver_mcp",
     instructions=(
-        "Measure FST waveform files: signal values, period/duty, latency, "
+        "Measure VCD/FST waveform files: signal values, period/duty, latency, "
         "event search, and PNG plots. Every tool takes the waveform file "
         "path; call waver_open first to learn a file's timescale and "
         "duration — they frame every window you pass elsewhere. Signal "
@@ -94,7 +94,7 @@ def _open(file: str) -> str | None:
 def waver_open(file: str) -> str:
     """What is in this waveform file?
 
-    Answers "what's in this FST? how long did the simulation run? what's
+    Answers "what's in this waveform file? how long did the simulation run? what's
     the timescale?". Call it first for any file you have not inspected yet;
     the timescale and duration it reports frame every window you pass to
     the other waver_* tools. Use waver_search to list the individual
@@ -122,7 +122,7 @@ def waver_open(file: str) -> str:
 def waver_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) -> str:
     """Which signals are in this waveform file?
 
-    Answers "what signals does this FST contain? is there a signal named
+    Answers "what signals does this waveform file contain? is there a signal named
     X?". Pass a case-insensitive substring of `pattern` to narrow the list
     on large designs. The names shown are what you pass to waver_values,
     waver_analyze, waver_latency, waver_find and waver_plot — full names

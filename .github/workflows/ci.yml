@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Install dependencies
         run: uv sync --frozen
       - name: Check formatting
@@ -52,8 +52,8 @@ jobs:
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run tests
@@ -68,8 +68,8 @@ jobs:
     # analyze < 50 ms on the ~400k-change bench fixture). Linux only:
     # the budgets are calibrated on CI runners, not local machines.
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Install dependencies
         run: uv sync --frozen
       - name: Run perf gate

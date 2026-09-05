@@ -1,7 +1,7 @@
 """Mypy stubs for the pywellen package (untyped Rust/pyo3 bindings).
 
 pywellen ships no type information; these stubs cover the surface that
-waver_mcp uses.
+peeper_mcp uses.
 """
 
 Value = int | float | str

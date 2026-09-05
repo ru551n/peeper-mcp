@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from waver_mcp.timeutil import (
+from peeper_mcp.timeutil import (
     TimeValueError,
     format_ticks,
     parse_time,

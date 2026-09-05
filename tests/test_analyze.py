@@ -1,4 +1,4 @@
-"""Tests for waver_analyze (pure core) and the waver_analyze tool."""
+"""Tests for peeper_analyze (pure core) and the peeper_analyze tool."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from waver_mcp.analyze import analyze
-from waver_mcp.server import waver_analyze
+from peeper_mcp.analyze import analyze
+from peeper_mcp.server import peeper_analyze
 
 NS = Decimal("1e-9")  # 1 tick = 1 ns for the synthetic core tests
 
@@ -125,9 +125,9 @@ class TestAnalyzeDegenerate:
         assert "  duty:     0% high, 100% low" in out
 
 
-class TestWaverAnalyzeTool:
+class TestPeeperAnalyzeTool:
     def test_clock_fixture(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "clk")
+        out = peeper_analyze(str(all_types_path), "clk")
         assert "signal:   tb_wave.clk" in out
         assert "changes:  200" in out
         assert "  duty:     49.75% high, 50.25% low" in out
@@ -135,35 +135,35 @@ class TestWaverAnalyzeTool:
         assert "  frequency: 100MHz" in out
 
     def test_enum_fixture(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "state")
+        out = peeper_analyze(str(all_types_path), "state")
         assert '"idle"' in out
         assert "x/z:" not in out
 
     def test_real_fixture(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "real_sig")
+        out = peeper_analyze(str(all_types_path), "real_sig")
         assert "real:     min 0, max 7.5" in out
 
     def test_wide_vector_fixture(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "data")
+        out = peeper_analyze(str(all_types_path), "data")
         assert "x/z:" in out
         assert "defined:  min 0x123456789abcdef" in out
 
     def test_window(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "clk", start="0", end="20ns")
+        out = peeper_analyze(str(all_types_path), "clk", start="0", end="20ns")
         assert "window:   [0ns, 20ns)" in out
 
     def test_end_before_start(self, all_types_path: Path) -> None:
-        out = waver_analyze(str(all_types_path), "clk", start="20ns", end="10ns")
+        out = peeper_analyze(str(all_types_path), "clk", start="20ns", end="10ns")
         assert "window is empty" in out
 
     def test_unknown_signal(self, all_types_path: Path) -> None:
-        assert "no signal named 'nope'" in waver_analyze(str(all_types_path), "nope")
+        assert "no signal named 'nope'" in peeper_analyze(str(all_types_path), "nope")
 
     def test_missing_file(self) -> None:
-        assert "not found" in waver_analyze("/nonexistent/x.fst", "clk")
+        assert "not found" in peeper_analyze("/nonexistent/x.fst", "clk")
 
     def test_held_rest_of_file(self, all_types_path: Path) -> None:
         # Start well past the signal's last change.
-        out = waver_analyze(str(all_types_path), "state", start="2us")
+        out = peeper_analyze(str(all_types_path), "state", start="2us")
         assert "no changes after" in out
         assert "held" in out

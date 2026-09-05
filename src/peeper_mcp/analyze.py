@@ -1,4 +1,4 @@
-"""Vectorized signal analysis — the core of waver_analyze.
+"""Vectorized signal analysis — the core of peeper_analyze.
 
 Pure function over a window of (times, values) change data plus the
 value entering the window. No I/O, no file state: testable in isolation.
@@ -17,7 +17,7 @@ from decimal import Decimal
 
 import numpy as np
 
-from waver_mcp.formatting import format_value
+from peeper_mcp.formatting import format_value
 
 #: Bit-pattern strings that carry X/Z (logic signals only).
 _XZ_RE = re.compile(r"[01xz_]+", re.IGNORECASE)

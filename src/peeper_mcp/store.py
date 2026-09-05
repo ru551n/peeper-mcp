@@ -8,7 +8,7 @@ A :class:`WaveformFile` wraps one pywellen ``Waveform`` and exposes:
 - cheap time-based point reads (``value_at``) that skip full decoding.
 
 A :class:`FileStore` keeps an LRU of open files (bounded by
-``WAVE_MCP_MAX_FILES``).
+``PEEPER_MCP_MAX_FILES``).
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from decimal import Decimal
 import numpy as np
 import pywellen
 
-from waver_mcp.env import env_int
-from waver_mcp.timeutil import TimeValueError, ticks_per_second
+from peeper_mcp.env import env_int
+from peeper_mcp.timeutil import TimeValueError, ticks_per_second
 
 #: Seconds-per-unit exponents pywellen may report (10**exponent seconds).
 _EXONENT_TO_UNIT: dict[int, str] = {

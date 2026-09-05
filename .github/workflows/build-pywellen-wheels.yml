@@ -7,7 +7,7 @@ name: Build pywellen wheels (Windows)
 #
 # This workflow builds and publishes a win_amd64 wheel as a GitHub
 # Release purely as an external convenience for downstream users who
-# want to `pip install waver-mcp` on Windows without a Rust toolchain.
+# want to `pip install peeper-mcp` on Windows without a Rust toolchain.
 # It is NOT consumed by this repo's own pyproject.toml/CI, which always
 # build pywellen from the unmodified PyPI sdist like every other
 # platform -- our tests should exercise the exact same install path our
@@ -115,7 +115,7 @@ jobs:
             built from the unmodified sdist published on PyPI via maturin/cargo on a
             `windows-latest` GitHub Actions runner. Not affiliated with upstream
             [ekiwi/wellen](https://github.com/ekiwi/wellen); built solely as an
-            optional convenience for downstream `waver-mcp` users on Windows who
+            optional convenience for downstream `peeper-mcp` users on Windows who
             don't have a Rust toolchain installed. Not used by this repo's own
             install/CI, which always build pywellen from source like every other
             platform. Auto-published when the pywellen pin in pyproject.toml

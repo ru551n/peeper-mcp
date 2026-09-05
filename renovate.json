@@ -21,5 +21,18 @@
   ],
   "lockFileMaintenance": {
     "enabled": true
-  }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track our wellen fork's GitHub Releases for the pywellen Linux/Windows wheel direct-URL dependencies (pep621 doesn't understand these -- they're not plain version pins).",
+      "managerFilePatterns": ["^pyproject\\.toml$"],
+      "matchStrings": [
+        "pywellen @ https://github\\.com/ru551n/wellen/releases/download/v(?<currentValue>[\\d.]+)/pywellen-[\\d.]+-(?<pytag>cp\\d+)-(?<abitag>cp\\d+)-(?<platform>manylinux_2_17_x86_64\\.manylinux2014_x86_64|win_amd64)\\.whl"
+      ],
+      "depNameTemplate": "ru551n/wellen",
+      "datasourceTemplate": "github-releases",
+      "autoReplaceStringTemplate": "pywellen @ https://github.com/ru551n/wellen/releases/download/v{{{newValue}}}/pywellen-{{{newValue}}}-{{{pytag}}}-{{{abitag}}}-{{{platform}}}.whl"
+    }
+  ]
 }

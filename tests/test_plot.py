@@ -99,9 +99,9 @@ class TestWaverPlot:
         # -> Any annotation: no outputSchema, text + image content only.
         tools = await mcp.list_tools()
         plot = next(t for t in tools if t.name == "waver_plot")
-        assert plot.outputSchema is None
+        assert plot.output_schema is None
         res = await mcp.call_tool(
             "waver_plot", {"file": str(all_types_path), "signals": ["clk"]}
         )
-        types = [c.type for c in res]
+        types = [c.type for c in res.content]
         assert types == ["text", "image"]

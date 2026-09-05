@@ -29,7 +29,7 @@ def _server() -> StdioServerParameters:
 
 
 def _text(result: object) -> str:
-    assert not result.isError
+    assert not result.is_error
     return result.content[0].text
 
 
@@ -112,9 +112,9 @@ class TestE2E:
             res = await session.call_tool(
                 "waver_plot", {"file": file, "signals": ["clk", "state"]}
             )
-            assert not res.isError
+            assert not res.is_error
             assert [c.type for c in res.content] == ["text", "image"]
-            assert res.content[1].mimeType == "image/png"
+            assert res.content[1].mime_type == "image/png"
 
     async def test_error_surfaces_as_text(self) -> None:
         async with (

@@ -1,0 +1,66 @@
+name: Build pywellen wheels (Windows)
+
+# pywellen (github.com/ekiwi/wellen) ships prebuilt PyPI wheels for Linux
+# and macOS only. On Windows, pip/uv fall back to building it from the
+# sdist via maturin/cargo at install time, which requires a Rust
+# toolchain + the MSVC linker on the installing machine (see README).
+#
+# This workflow builds a prebuilt win_amd64 wheel from the *unmodified*
+# sdist published on PyPI -- no fork or patch of wellen's source, just a
+# `pip wheel` run on a windows-latest runner (which already has Rust +
+# MSVC preinstalled) -- and attaches it to a GitHub Release in this repo.
+# Run manually whenever pyproject.toml's pywellen pin changes, then wire
+# the resulting release asset URLs into pyproject.toml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "pywellen version to build (must exist as an sdist on PyPI)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build wheel (py${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheel from the unmodified PyPI sdist
+        run: |
+          python -m pip install --upgrade pip
+          pip wheel --no-deps --no-binary pywellen -w dist "pywellen==${{ inputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-py${{ matrix.python-version }}
+          path: dist/*.whl
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create/update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pywellen-wheels-v${{ inputs.version }}
+          name: "pywellen ${{ inputs.version }} Windows wheels"
+          body: |
+            Prebuilt Windows (win_amd64) wheels for `pywellen==${{ inputs.version }}`,
+            built from the unmodified sdist published on PyPI via maturin/cargo on a
+            `windows-latest` GitHub Actions runner. Not affiliated with upstream
+            [ekiwi/wellen](https://github.com/ekiwi/wellen); built solely to spare
+            Windows installs of this project from needing a local Rust toolchain.
+            See the README for details.
+          files: dist/*.whl

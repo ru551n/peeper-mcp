@@ -33,8 +33,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     # pywellen ships prebuilt wheels for linux x86_64/aarch64 and macOS
-    # x86_64/arm64 (cp3.9-cp3.15) but NO WINDOWS WHEELS, so Windows is
-    # not CI-verified. The suite is pure Python on top of pywellen.
+    # x86_64/arm64 (cp3.9-cp3.15) but NO WINDOWS WHEELS, so on windows-latest
+    # it is built from its sdist via maturin/cargo (Rust + the MSVC linker
+    # are preinstalled on the windows-latest runner image).
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +49,10 @@ jobs:
           - os: macos-latest
             python-version: "3.13"
           - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.13"
+          - os: windows-latest
             python-version: "3.14"
     env:
       UV_PYTHON: ${{ matrix.python-version }}

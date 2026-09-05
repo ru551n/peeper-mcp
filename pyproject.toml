@@ -7,8 +7,8 @@ requires-python = ">=3.10"
 license = { file = "LICENSE" }
 dependencies = [
     # FastMCP (mcp.server.fastmcp) was removed in mcp 2.x — pin to 1.x.
-    "mcp>=1.29,<2",
-    "pydantic>=2.0",
+    "mcp>=2.1,<3",
+    "pydantic>=2.12",
     # Rust bindings for the wellen FST/VCD reader: prebuilt wheels for
     # linux (x86_64/aarch64) and macOS (x86_64/arm64), cp3.9-cp3.15.
     # NO WINDOWS WHEELS — CI excludes Windows (see .github/workflows/ci.yml).

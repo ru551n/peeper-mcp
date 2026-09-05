@@ -1,4 +1,4 @@
-"""FastMCP server exposing the waver_* waveform (VCD/FST) measurement tools.
+"""MCPServer exposing the waver_* waveform (VCD/FST) measurement tools.
 
 The server is stateless from the caller's point of view: every tool takes
 the waveform file path, and results never depend on a "current file".
@@ -23,7 +23,7 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 
 from waver_mcp.analyze import analyze, is_xz, rising_edges, value_runs
@@ -63,11 +63,11 @@ _MAX_TEXT_RUNS_DRAWN = 2000
 _LANE_HEIGHT = 1.0
 _LANE_GAP = 0.4
 
-_RO = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+_RO = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 _STORE = FileStore()
 
-mcp = FastMCP(
+mcp = MCPServer(
     "waver_mcp",
     instructions=(
         "Measure VCD/FST waveform files: signal values, period/duty, latency, "
@@ -771,7 +771,7 @@ def waver_plot(
             ImageContent(
                 type="image",
                 data=base64.b64encode(png_bytes).decode(),
-                mimeType="image/png",
+                mime_type="image/png",
             ),
         )
     except (AmbiguousSignal, SignalNotFound, TimeValueError) as exc:

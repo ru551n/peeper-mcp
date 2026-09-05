@@ -60,7 +60,7 @@ class TestServer:
         assert {"waver_open", "waver_search"} <= names
         for tool in tools:
             assert tool.annotations is not None
-            assert tool.annotations.readOnlyHint is True
+            assert tool.annotations.read_only_hint is True
 
     def test_instructions_mention_open_first(self) -> None:
         assert mcp.instructions is not None

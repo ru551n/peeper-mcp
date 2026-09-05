@@ -72,9 +72,11 @@ def parse_time(value: str | int, ticks_per_second: Decimal) -> int:
             ticks_decimal = seconds / ticks_per_second
             rounded = ticks_decimal.to_integral_value(rounding=ROUND_HALF_UP)
             if rounded != ticks_decimal:
+                suggestion = format_ticks(int(rounded), ticks_per_second)
                 raise TimeValueError(
                     f"time {value!r} is not a whole number of file time ticks "
-                    f"(file timescale is {ticks_per_second} s per tick)"
+                    f"(file timescale is {ticks_per_second} s per tick); "
+                    f"did you mean {suggestion!r}?"
                 )
             ticks = int(rounded)
     if ticks < 0:

@@ -35,6 +35,18 @@ class TestWaverLatency:
         out = waver_latency(str(all_types_path), "state", "clk", edge="rise")
         assert "edge='rise' needs binary" in out
         assert "use edge='any'" in out
+        # The offending value it actually saw is reported too.
+        assert 'saw value "idle" at time 0ns' in out
+
+    def test_rise_needs_binary_reports_offending_int_value(
+        self, all_types_path: Path
+    ) -> None:
+        # cnt is a 4-bit counter (0, 1, 2, 3, ...) -> not 0/1 past its
+        # second change; the offending value and time should be reported.
+        out = waver_latency(str(all_types_path), "cnt", "clk", edge="rise")
+        assert "edge='rise' needs binary" in out
+        assert "saw value 2 at time 15ns" in out
+        assert "use edge='any'" in out
 
     def test_window_label_open_end(self, all_types_path: Path) -> None:
         out = waver_latency(str(all_types_path), "clk", "state", edge="any")

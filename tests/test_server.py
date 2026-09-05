@@ -24,6 +24,14 @@ class TestWaverOpen:
     def test_missing_file(self) -> None:
         assert "not found" in waver_open("/nonexistent/x.fst")
 
+    def test_unsupported_or_corrupt_file(self, tmp_path: Path) -> None:
+        # Any tool opening a non-VCD/FST/GHW (or corrupt) file must return
+        # a clean error string instead of an unhandled RuntimeError.
+        bad = tmp_path / "not_a_waveform.fst"
+        bad.write_text("this is definitely not a waveform file")
+        out = waver_open(str(bad))
+        assert "could not be opened" in out
+
 
 class TestWaverSearch:
     def test_lists_all(self, all_types_path: Path) -> None:
@@ -51,6 +59,13 @@ class TestWaverSearch:
 
     def test_missing_file(self) -> None:
         assert "not found" in waver_search("/nonexistent/x.fst")
+
+    def test_unsupported_or_corrupt_file(self, tmp_path: Path) -> None:
+        # Every tool opens the file via the same _open() helper, so this
+        # clean error isn't specific to waver_open.
+        bad = tmp_path / "not_a_waveform.vcd"
+        bad.write_text("garbage")
+        assert "could not be opened" in waver_search(str(bad))
 
 
 class TestServer:

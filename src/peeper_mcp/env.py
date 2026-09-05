@@ -1,7 +1,7 @@
 """Environment lookup for the peeper-mcp configuration.
 
 Configuration variables are named ``PEEPER_MCP_*`` (like the sibling MCP
-servers: ``VUNIT_MCP_*``, ``YOSYNTH_MCP_*``, ``VHDL_RAG_MCP_*``). The
+servers: ``VUNIT_MCP_*``, ``TSFPGA_MCP_*``, ``CORVIDEX_MCP_*``). The
 project's former name (``waver-mcp``) used ``WAVE_MCP_*``, and before that
 plain ``WAVE_*``; both are still honored as deprecated fallbacks so
 existing client configurations keep working.

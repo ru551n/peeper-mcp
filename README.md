@@ -73,7 +73,7 @@ All `waver_*`, all read-only:
 
 | Tool | Answers |
 | --- | --- |
-| `waver_open` | What is in this file? (format, writer, timescale, duration, signal counts). Call it first for a new file. |
+| `waver_open` | What is in this file? (format, writer, timescale, duration, signal counts). Optional — every tool opens the file itself, but this is a cheap way to learn a new file's metadata upfront. |
 | `waver_search` | Which signals are there? (full names with `real` / `string` / `64b` tags; substring `pattern`) |
 | `waver_values` | What values did this signal have in this window? (change list + entering value) |
 | `waver_value_at` | What was X at time T? (batch: several signals, one call) |
@@ -168,6 +168,19 @@ On the repo's ~400k-change bench fixture (`tools/bench.py`):
 CI enforces budgets on Linux (cold open < 100 ms, warm values < 20 ms,
 warm analyze < 50 ms) via the opt-in perf-gate tests
 (`pytest -m perf`).
+
+Open files are cached in an LRU of size `WAVE_MCP_MAX_FILES` (default 4).
+Once more than that many distinct files have been opened in a session,
+the least-recently-used one is evicted and closed; reopening it later
+re-triggers a full cold open (parse + decode), i.e. the ~5 ms (or
+longer, on bigger files) latency spike above. Raise `WAVE_MCP_MAX_FILES`
+if your workflow keeps more files open concurrently than that.
+
+`waver_plot` writes each PNG to a fresh file in the OS temp dir; the
+previous call's PNG is removed on the next `waver_plot` call
+(best-effort), so at most one temp file lingers per process. Any file
+left behind by an unclean shutdown is the OS temp dir's responsibility
+to eventually clean up.
 
 ## Agent skill
 

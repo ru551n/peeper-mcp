@@ -9,6 +9,7 @@ The only server state is a small LRU of open files (see
 from __future__ import annotations
 
 import base64
+import contextlib
 import os
 import re
 import tempfile
@@ -36,6 +37,7 @@ from waver_mcp.store import (
     SignalInfo,
     SignalNotFound,
     WaveformFile,
+    WaveformOpenError,
 )
 from waver_mcp.timeutil import (
     TimeValueError,
@@ -67,13 +69,18 @@ _RO = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 _STORE = FileStore()
 
+#: Path of the last PNG waver_plot wrote to the OS temp dir, so the next
+#: call can best-effort clean it up instead of accumulating files forever.
+_last_plot_path: str | None = None
+
 mcp = MCPServer(
     "waver_mcp",
     instructions=(
         "Measure VCD/FST waveform files: signal values, period/duty, latency, "
         "event search, and PNG plots. Every tool takes the waveform file "
-        "path; call waver_open first to learn a file's timescale and "
-        "duration — they frame every window you pass elsewhere. Signal "
+        "path and opens it itself, so calling waver_open first is optional "
+        "— it is just a quick way to learn a file's timescale and duration "
+        "upfront, which frame every window you pass elsewhere. Signal "
         "names accept case-insensitive full names or unique suffixes "
         "('clk' matches tb.dut.clk). Times are human-readable '10ns' / "
         "'1.5us' or integer file ticks."
@@ -85,7 +92,7 @@ def _open(file: str) -> str | None:
     """Return a self-describing error, or None if *file* opened."""
     try:
         _STORE.open(file)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, WaveformOpenError) as exc:
         return str(exc)
     return None
 
@@ -95,10 +102,11 @@ def waver_open(file: str) -> str:
     """What is in this waveform file?
 
     Answers "what's in this waveform file? how long did the simulation run? what's
-    the timescale?". Call it first for any file you have not inspected yet;
-    the timescale and duration it reports frame every window you pass to
-    the other waver_* tools. Use waver_search to list the individual
-    signals.
+    the timescale?". Optional — every other waver_* tool opens the file
+    itself, so you never have to call this first — but it is a cheap way
+    to learn a new file's timescale and duration upfront, which frame
+    every window you pass elsewhere. Use waver_search to list the
+    individual signals.
     """
     error = _open(file)
     if error is not None:
@@ -139,7 +147,7 @@ def waver_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) 
     shown = matches[: max(limit, 1)]
     header = f"signals: {total}"
     if total > len(shown):
-        header += f" (showing {len(shown)}; refine with pattern)"
+        header += f" (showing {len(shown)}; refine with pattern or raise limit)"
     lines = [f"file: {f.path}", header]
     for s in shown:
         tags = []
@@ -376,16 +384,27 @@ def waver_latency(
         tb, vb = f.window(ib.full_name, start_t, end_t)
         ea_name = "rising edges"
         if edge == "rise":
-            for name, kind, values, full in (
-                (a, pa.kind, va, ia.full_name),
-                (b, pb.kind, vb, ib.full_name),
+            for name, kind, values, times, full, info in (
+                (a, pa.kind, va, ta, ia.full_name, ia),
+                (b, pb.kind, vb, tb, ib.full_name, ib),
             ):
-                if kind != "int" or not bool(
-                    (len(values) == 0) or np.all((values >= 0) & (values <= 1))
-                ):
+                if kind == "int":
+                    bad_mask = (values < 0) | (values > 1)
+                    is_binary = len(values) == 0 or not bool(np.any(bad_mask))
+                    bad_idx = int(np.argmax(bad_mask)) if not is_binary else None
+                else:
+                    is_binary = False
+                    bad_idx = 0 if len(values) > 0 else None
+                if not is_binary:
+                    detail = ""
+                    if bad_idx is not None:
+                        bad_value = _fmt_value(info, values[bad_idx])
+                        bad_time = _tm(f, int(times[bad_idx]))
+                        detail = f" (saw value {bad_value} at time {bad_time})"
                     return (
                         f"edge='rise' needs binary (0/1) signals; {full}"
-                        f" (from {name!r}) is not — use edge='any'"
+                        f" (from {name!r}) is not binary{detail}"
+                        " — use edge='any'"
                     )
             ea = rising_edges(ta, va, int(f.value_at(ia.full_name, start_t)), start_t)
             eb = rising_edges(tb, vb, int(f.value_at(ib.full_name, start_t)), start_t)
@@ -746,8 +765,15 @@ def waver_plot(
             f"{os.path.basename(f.path)}   [{_tm(f, start_t)}, {_tm(f, win_end)})"
         )
         ax.grid(axis="x", linewidth=0.3, alpha=0.4)
+        global _last_plot_path
+        if _last_plot_path is not None:
+            # Best-effort: remove the previous call's temp PNG so a long
+            # session doesn't accumulate one file per waver_plot call.
+            with contextlib.suppress(OSError):
+                os.remove(_last_plot_path)
         fd, png_path = tempfile.mkstemp(prefix="waver-plot-", suffix=".png")
         os.close(fd)
+        _last_plot_path = png_path
         fig.savefig(png_path, format="png", dpi=100, bbox_inches="tight")
         plt.close(fig)
         fig = None

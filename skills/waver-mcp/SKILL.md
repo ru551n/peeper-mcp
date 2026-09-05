@@ -20,8 +20,9 @@ file, is there a signal named, what was the value at <time>,
 how much time in X / Z.
 
 Every tool takes the waveform **file path** as its first argument — there is
-no "current file" state. Call `waver_open` first for any file you have not
-inspected yet: the timescale and duration it reports frame every window you
+no "current file" state, and every tool opens the file itself, so calling
+`waver_open` first is optional. It is still a cheap way to learn a new
+file's timescale and duration upfront, since they frame every window you
 pass elsewhere. Signal names accept case-insensitive full names or unique
 dot-separated suffixes (`clk` matches `tb.dut.clk`; the result notes the
 match). Times are human-readable (`"10ns"`, `"1.5us"`) or integers of the
@@ -34,7 +35,7 @@ If output looks off or you don't know what a file contains, call
 
 | Tool | What it answers |
 | --- | --- |
-| `waver_open` | **"What is in this waveform file?"** — format, writer, timescale, duration, scope + signal counts. Call it first for a new file. Header-only, so fast even on large files. |
+| `waver_open` | **"What is in this waveform file?"** — format, writer, timescale, duration, scope + signal counts. Optional — every other tool opens the file itself — but a cheap way to learn a new file's metadata upfront. Header-only, so fast even on large files. |
 | `waver_search` | **"Which signals are there?"** — full names with type and tags (`real`, `string`, `64b`); case-insensitive substring `pattern` to narrow. Header-only. |
 | `waver_values` | **"What values did this signal have in this window?"** — change list in `[start, end)` plus the value entering the window. Hex for >= 32-bit values; X/Z and enum strings kept as-is. Truncation notices say how to narrow. |
 | `waver_value_at` | **"What was X at time T?"** — batch point query (several signals in one call). Past the file end returns the last recorded value and says so. |
@@ -83,9 +84,9 @@ wants the image on disk.
    time. If the run recorded no
    waveform, re-running with `waveform_format` is vunit-mcp's job, not
    waver's.
-4. `waver_open(path)` -> `waver_values` / `waver_find` / `waver_analyze`
-   around the failing check's time -> `waver_plot` for visual
-   confirmation.
+4. `waver_open(path)` (optional, for the file's metadata) -> `waver_values`
+   / `waver_find` / `waver_analyze` around the failing check's time ->
+   `waver_plot` for visual confirmation.
 
 ## Use / don't use
 - USE for signal-level questions about an **existing** waveform file
@@ -101,12 +102,13 @@ wants the image on disk.
   - the user wants to change or re-run something — that is vunit-mcp;
   - "which tests failed" -> `vunit_get_report`;
   - the file is not a readable VCD/FST waveform (or is otherwise
-    unreadable): `waver_open` fails clearly — say
+    unreadable): any tool you call on it fails clearly — say
     so and stop. Do not loop, and do not try to decode the file by hand.
 
 ## Rules of thumb
-- `waver_open` first on any new file — timescale + duration frame every
-  window you pass afterwards.
+- `waver_open` is optional (every tool opens the file itself) but useful
+  first on any new file — timescale + duration frame every window you
+  pass afterwards.
 - Prefer `waver_analyze` over `waver_values` for statistical questions
   (period, X/Z fraction, distribution): analyze is vectorized and stays
   fast on hundreds of thousands of changes.

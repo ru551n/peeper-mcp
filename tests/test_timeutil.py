@@ -72,6 +72,23 @@ def test_parse_time_rejects_negative_int() -> None:
 
 
 @pytest.mark.parametrize(
+    ("value", "tps", "suggestion"),
+    [
+        # 1ns at a 3fs timescale is 333333.33... ticks -> rounds to
+        # 999.999ps (333333 ticks).
+        ("1ns", ticks_per_second(3, "fs"), "999.999ps"),
+        # 1.25fs at a 3fs timescale rounds down to 0 ticks.
+        ("1.25fs", ticks_per_second(3, "fs"), "0ns"),
+    ],
+)
+def test_parse_time_rounding_error_suggests_nearest_tick(
+    value: str, tps: Decimal, suggestion: str
+) -> None:
+    with pytest.raises(TimeValueError, match=f"did you mean {suggestion!r}"):
+        parse_time(value, tps)
+
+
+@pytest.mark.parametrize(
     ("ticks", "tps", "expected"),
     [
         (0, FS, "0ns"),

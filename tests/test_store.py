@@ -13,6 +13,7 @@ from waver_mcp.store import (
     SignalInfo,
     SignalNotFound,
     WaveformFile,
+    WaveformOpenError,
     resolve_signal,
 )
 
@@ -78,6 +79,17 @@ class TestOpen:
     def test_missing_file(self, store: FileStore) -> None:
         with pytest.raises(FileNotFoundError, match="not found"):
             store.open("/nonexistent/nope.fst")
+
+    def test_unsupported_or_corrupt_file(
+        self, store: FileStore, tmp_path: Path
+    ) -> None:
+        # A file that exists but isn't a VCD/FST/GHW — pywellen raises a
+        # bare RuntimeError for this; FileStore.open should wrap it in a
+        # clean, self-describing error instead of letting it propagate.
+        bad = tmp_path / "not_a_waveform.fst"
+        bad.write_text("this is definitely not a waveform file")
+        with pytest.raises(WaveformOpenError, match="could not be opened"):
+            store.open(str(bad))
 
     def test_open_returns_cached_instance(
         self, store: FileStore, all_types_path: Path

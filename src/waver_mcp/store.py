@@ -57,6 +57,15 @@ class AmbiguousSignal(LookupError):
         super().__init__(f"signal name {name!r} is ambiguous: {', '.join(candidates)}")
 
 
+class WaveformOpenError(RuntimeError):
+    """Raised when pywellen cannot parse a file as VCD/FST/GHW."""
+
+    def __init__(self, path: str, cause: BaseException) -> None:
+        self.path = path
+        self.cause = cause
+        super().__init__(f"waveform file could not be opened: {path} ({cause})")
+
+
 @dataclass(frozen=True)
 class SignalInfo:
     """Header-only description of one signal."""
@@ -249,7 +258,14 @@ class FileStore:
         if existing is not None:
             self._files.move_to_end(resolved)
             return existing
-        file = WaveformFile(resolved, pywellen.Waveform(resolved))
+        try:
+            wf = pywellen.Waveform(resolved)
+        except Exception as exc:
+            # pywellen raises a bare RuntimeError (or similar) for
+            # unsupported/corrupt files — surface it as a clean,
+            # self-describing error instead of an unhandled traceback.
+            raise WaveformOpenError(resolved, exc) from exc
+        file = WaveformFile(resolved, wf)
         self._files[resolved] = file
         while len(self._files) > self.max_files:
             # Dropping the last reference closes the Rust file handle.

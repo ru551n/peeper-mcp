@@ -34,9 +34,11 @@ jobs:
     timeout-minutes: 20
     # pywellen ships prebuilt wheels for linux x86_64/aarch64 and macOS
     # x86_64/arm64 (cp3.9-cp3.15) but NO WINDOWS WHEELS upstream; on
-    # windows-latest, pyproject.toml pulls a win_amd64 wheel we build
-    # ourselves (see build-pywellen-wheels.yml) instead of compiling
-    # from the sdist at install time.
+    # windows-latest this builds from the sdist via maturin/cargo at
+    # install time (the runner has Rust + MSVC preinstalled, ~1-2min).
+    # See build-pywellen-wheels.yml for the separate, unrelated workflow
+    # that publishes a prebuilt Windows wheel as an external convenience
+    # for downstream users -- not used by this job.
     strategy:
       fail-fast: false
       matrix:

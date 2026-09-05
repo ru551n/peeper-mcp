@@ -5,20 +5,21 @@ name: Build pywellen wheels (Windows)
 # sdist via maturin/cargo at install time, which requires a Rust
 # toolchain + the MSVC linker on the installing machine (see README).
 #
-# Renovate tracks and bumps the plain `pywellen==X.Y.Z ; ...` version pin
-# in pyproject.toml on its own (it doesn't understand the direct-URL
-# wheel deps below that one, so it leaves those alone). This workflow
-# runs on every PR that touches pyproject.toml -- which covers every
-# Renovate PR automatically -- reads whatever version is now pinned,
-# and if we haven't already built a Windows wheel for it:
-#   1. builds win_amd64 wheels (py3.12/3.13/3.14) from the *unmodified*
-#      sdist published on PyPI (no fork or patch of wellen's source),
-#   2. attaches them to a GitHub Release in this repo, and
-#   3. pushes a follow-up commit onto the SAME PR branch that repoints
-#      the Windows wheel URLs at the new release and refreshes uv.lock.
-# So a Renovate pywellen bump becomes self-healing: by the time its PR
-# is mergeable, every platform (Windows included) is on the new pin with
-# a matching prebuilt wheel.
+# This workflow builds and publishes a win_amd64 wheel as a GitHub
+# Release purely as an external convenience for downstream users who
+# want to `pip install waver-mcp` on Windows without a Rust toolchain.
+# It is NOT consumed by this repo's own pyproject.toml/CI, which always
+# build pywellen from the unmodified PyPI sdist like every other
+# platform -- our tests should exercise the exact same install path our
+# users on Linux/macOS get, not a binary we produced ourselves.
+#
+# Renovate tracks and bumps the plain `pywellen==X.Y.Z` pin in
+# pyproject.toml on its own. This workflow runs on every PR that touches
+# pyproject.toml -- which covers every Renovate PR automatically --
+# reads whatever version is now pinned, and if we haven't already built
+# a Windows wheel for it, builds win_amd64 wheels (py3.12/3.13/3.14)
+# from the *unmodified* sdist published on PyPI (no fork or patch of
+# wellen's source) and attaches them to a GitHub Release in this repo.
 #
 # workflow_dispatch is kept for manual/backfill runs (e.g. bootstrapping
 # a version that predates this workflow).
@@ -95,14 +96,11 @@ jobs:
           path: dist/*.whl
 
   publish:
-    name: Publish release and repoint pyproject.toml
+    name: Publish release
     needs: [detect, build]
     if: needs.detect.outputs.needs_build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -116,32 +114,10 @@ jobs:
             Prebuilt Windows (win_amd64) wheels for `pywellen==${{ needs.detect.outputs.version }}`,
             built from the unmodified sdist published on PyPI via maturin/cargo on a
             `windows-latest` GitHub Actions runner. Not affiliated with upstream
-            [ekiwi/wellen](https://github.com/ekiwi/wellen); built solely to spare
-            Windows installs of this project from needing a local Rust toolchain.
-            Auto-published when the pywellen pin in pyproject.toml changed
-            (via Renovate or a manual bump). See the README for details.
+            [ekiwi/wellen](https://github.com/ekiwi/wellen); built solely as an
+            optional convenience for downstream `waver-mcp` users on Windows who
+            don't have a Rust toolchain installed. Not used by this repo's own
+            install/CI, which always build pywellen from source like every other
+            platform. Auto-published when the pywellen pin in pyproject.toml
+            changed (via Renovate or a manual bump). See the README for details.
           files: dist/*.whl
-      - name: Repoint the Windows wheel URLs at the new release
-        id: repoint
-        run: |
-          old=$(grep -oP 'pywellen-wheels-v\K[0-9.]+' pyproject.toml | head -1)
-          new="${{ needs.detect.outputs.version }}"
-          if [ "$old" = "$new" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          sed -i "/pywellen/s/$old/$new/g" pyproject.toml
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@v10.0.1
-        if: steps.repoint.outputs.changed == 'true'
-      - name: Refresh uv.lock
-        if: steps.repoint.outputs.changed == 'true'
-        run: uv lock
-      - name: Commit and push the fixup
-        if: steps.repoint.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml uv.lock
-          git commit -m "build: point Windows pywellen wheels at v${{ needs.detect.outputs.version }}"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}"

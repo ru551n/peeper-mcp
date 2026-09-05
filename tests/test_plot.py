@@ -1,4 +1,4 @@
-"""Tests for waver_plot."""
+"""Tests for peeper_plot."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from mcp.types import ImageContent, TextContent
 
-from waver_mcp.server import mcp, waver_plot
+from peeper_mcp.server import mcp, peeper_plot
 
 PNG_MAGIC = b"\x89PNG"
 
@@ -24,9 +24,9 @@ def _image(res: object) -> bytes:
     return base64.b64decode(image.data)
 
 
-class TestWaverPlot:
+class TestPeeperPlot:
     def test_returns_text_and_image(self, all_types_path: Path) -> None:
-        res = waver_plot(str(all_types_path), ["clk", "state", "real_sig"])
+        res = peeper_plot(str(all_types_path), ["clk", "state", "real_sig"])
         assert isinstance(res, tuple) and len(res) == 2
         assert _image(res).startswith(PNG_MAGIC)
         lines = _text(res).splitlines()
@@ -37,7 +37,7 @@ class TestWaverPlot:
             assert any(line.startswith(f"  {name}") for line in lines)
 
     def test_png_file_written(self, all_types_path: Path) -> None:
-        res = waver_plot(str(all_types_path), ["clk"])
+        res = peeper_plot(str(all_types_path), ["clk"])
         line = next(
             line for line in _text(res).splitlines() if line.startswith("image:")
         )
@@ -47,7 +47,7 @@ class TestWaverPlot:
         assert path.read_bytes().startswith(PNG_MAGIC)
 
     def test_lane_kinds(self, all_types_path: Path) -> None:
-        text = _text(waver_plot(str(all_types_path), ["clk", "state", "real_sig"]))
+        text = _text(peeper_plot(str(all_types_path), ["clk", "state", "real_sig"]))
         clk_line = next(line for line in text.splitlines() if "tb_wave.clk" in line)
         assert "binary (199 changes)" in clk_line
         state_line = next(line for line in text.splitlines() if "tb_wave.state" in line)
@@ -57,51 +57,51 @@ class TestWaverPlot:
         assert "numeric (99 changes)" in real_line
 
     def test_decimated(self, bench_path: Path) -> None:
-        text = _text(waver_plot(str(bench_path), ["clk"]))
+        text = _text(peeper_plot(str(bench_path), ["clk"]))
         assert "window:   [0ns, 2ms)" in text
         dec = next(line for line in text.splitlines() if "decimated" in line)
         pts = int(dec.split("to ")[1].split(" points")[0])
         assert pts <= 10_001
 
     def test_window(self, all_types_path: Path) -> None:
-        text = _text(waver_plot(str(all_types_path), ["clk"], start="10ns"))
+        text = _text(peeper_plot(str(all_types_path), ["clk"], start="10ns"))
         assert "window:   [10ns, 995ns)" in text
 
     def test_xz_shaded(self, all_types_path: Path) -> None:
-        text = _text(waver_plot(str(all_types_path), ["data"]))
+        text = _text(peeper_plot(str(all_types_path), ["data"]))
         data_line = next(line for line in text.splitlines() if "tb_wave.data" in line)
         # data has 14 changes -> 14 held runs; it opens with an all-X span.
         assert "text (14 runs, 1 x/z interval)" in data_line
 
     def test_duplicate_signals_deduped(self, all_types_path: Path) -> None:
-        text = _text(waver_plot(str(all_types_path), ["clk", "tb_wave.clk"]))
+        text = _text(peeper_plot(str(all_types_path), ["clk", "tb_wave.clk"]))
         assert "traces:   1" in text
         assert text.count("tb_wave.clk") == 1
 
     def test_missing_file(self) -> None:
-        assert "not found" in waver_plot("/nonexistent/x.fst", ["clk"])
+        assert "not found" in peeper_plot("/nonexistent/x.fst", ["clk"])
 
     def test_unknown_signal(self, all_types_path: Path) -> None:
-        assert "no signal named 'nope'" in waver_plot(str(all_types_path), ["nope"])
+        assert "no signal named 'nope'" in peeper_plot(str(all_types_path), ["nope"])
 
     def test_no_signals(self, all_types_path: Path) -> None:
-        assert "no signals given" in waver_plot(str(all_types_path), [])
+        assert "no signals given" in peeper_plot(str(all_types_path), [])
 
     def test_empty_window(self, all_types_path: Path) -> None:
-        out = waver_plot(str(all_types_path), ["clk"], start="50ns", end="10ns")
+        out = peeper_plot(str(all_types_path), ["clk"], start="50ns", end="10ns")
         assert "window is empty" in out
 
     def test_start_beyond_file_end(self, all_types_path: Path) -> None:
-        out = waver_plot(str(all_types_path), ["clk"], start="2us")
+        out = peeper_plot(str(all_types_path), ["clk"], start="2us")
         assert "beyond the end of the file" in out
 
     async def test_unstructured_output(self, all_types_path: Path) -> None:
         # -> Any annotation: no outputSchema, text + image content only.
         tools = await mcp.list_tools()
-        plot = next(t for t in tools if t.name == "waver_plot")
+        plot = next(t for t in tools if t.name == "peeper_plot")
         assert plot.output_schema is None
         res = await mcp.call_tool(
-            "waver_plot", {"file": str(all_types_path), "signals": ["clk"]}
+            "peeper_plot", {"file": str(all_types_path), "signals": ["clk"]}
         )
         types = [c.type for c in res.content]
         assert types == ["text", "image"]

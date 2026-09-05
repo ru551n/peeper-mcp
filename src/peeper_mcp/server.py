@@ -1,9 +1,9 @@
-"""MCPServer exposing the waver_* waveform (VCD/FST) measurement tools.
+"""MCPServer exposing the peeper_* waveform (VCD/FST) measurement tools.
 
 The server is stateless from the caller's point of view: every tool takes
 the waveform file path, and results never depend on a "current file".
 The only server state is a small LRU of open files (see
-:mod:`waver_mcp.store`) so repeated calls on the same file stay fast.
+:mod:`peeper_mcp.store`) so repeated calls on the same file stay fast.
 """
 
 from __future__ import annotations
@@ -27,10 +27,10 @@ from matplotlib.patches import Rectangle
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 
-from waver_mcp.analyze import analyze, is_xz, rising_edges, value_runs
-from waver_mcp.env import env_int
-from waver_mcp.formatting import format_value
-from waver_mcp.store import (
+from peeper_mcp.analyze import analyze, is_xz, rising_edges, value_runs
+from peeper_mcp.env import env_int
+from peeper_mcp.formatting import format_value
+from peeper_mcp.store import (
     AmbiguousSignal,
     FileStore,
     Resolution,
@@ -39,17 +39,17 @@ from waver_mcp.store import (
     WaveformFile,
     WaveformOpenError,
 )
-from waver_mcp.timeutil import (
+from peeper_mcp.timeutil import (
     TimeValueError,
     display_unit,
     format_ticks,
     parse_time,
 )
 
-#: Default cap on the signal list waver_search returns without a pattern.
+#: Default cap on the signal list peeper_search returns without a pattern.
 MAX_SEARCH_RESULTS = env_int("MAX_SEARCH_RESULTS", "100")
 
-#: Default cap on changes waver_values returns.
+#: Default cap on changes peeper_values returns.
 MAX_ROWS = env_int("MAX_ROWS", "1000")
 
 #: Max plotted points per trace; denser change lists are decimated.
@@ -61,7 +61,7 @@ _MAX_TEXT_LABELS = 24
 #: Max run boundaries drawn on a text lane before striding.
 _MAX_TEXT_RUNS_DRAWN = 2000
 
-#: Per-lane geometry for waver_plot.
+#: Per-lane geometry for peeper_plot.
 _LANE_HEIGHT = 1.0
 _LANE_GAP = 0.4
 
@@ -69,16 +69,16 @@ _RO = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 _STORE = FileStore()
 
-#: Path of the last PNG waver_plot wrote to the OS temp dir, so the next
+#: Path of the last PNG peeper_plot wrote to the OS temp dir, so the next
 #: call can best-effort clean it up instead of accumulating files forever.
 _last_plot_path: str | None = None
 
 mcp = MCPServer(
-    "waver_mcp",
+    "peeper_mcp",
     instructions=(
         "Measure VCD/FST waveform files: signal values, period/duty, latency, "
         "event search, and PNG plots. Every tool takes the waveform file "
-        "path and opens it itself, so calling waver_open first is optional "
+        "path and opens it itself, so calling peeper_open first is optional "
         "— it is just a quick way to learn a file's timescale and duration "
         "upfront, which frame every window you pass elsewhere. Signal "
         "names accept case-insensitive full names or unique suffixes "
@@ -98,14 +98,14 @@ def _open(file: str) -> str | None:
 
 
 @mcp.tool(annotations=_RO)
-def waver_open(file: str) -> str:
+def peeper_open(file: str) -> str:
     """What is in this waveform file?
 
     Answers "what's in this waveform file? how long did the simulation run? what's
-    the timescale?". Optional — every other waver_* tool opens the file
+    the timescale?". Optional — every other peeper_* tool opens the file
     itself, so you never have to call this first — but it is a cheap way
     to learn a new file's timescale and duration upfront, which frame
-    every window you pass elsewhere. Use waver_search to list the
+    every window you pass elsewhere. Use peeper_search to list the
     individual signals.
     """
     error = _open(file)
@@ -121,19 +121,19 @@ def waver_open(file: str) -> str:
         f"duration:  {format_ticks(f.duration(), tps)} (last change across "
         "sampled signals)",
         f"scopes:    {', '.join(f.scope_names)}",
-        f"signals:   {len(f.signals)} (waver_search lists them)",
+        f"signals:   {len(f.signals)} (peeper_search lists them)",
     ]
     return "\n".join(lines)
 
 
 @mcp.tool(annotations=_RO)
-def waver_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) -> str:
+def peeper_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) -> str:
     """Which signals are in this waveform file?
 
     Answers "what signals does this waveform file contain? is there a signal named
     X?". Pass a case-insensitive substring of `pattern` to narrow the list
-    on large designs. The names shown are what you pass to waver_values,
-    waver_analyze, waver_latency, waver_find and waver_plot — full names
+    on large designs. The names shown are what you pass to peeper_values,
+    peeper_analyze, peeper_latency, peeper_find and peeper_plot — full names
     or unique suffixes. Header-only: nothing is decoded, so this is fast
     even on big files.
     """
@@ -165,7 +165,7 @@ def waver_search(file: str, pattern: str = "", limit: int = MAX_SEARCH_RESULTS) 
 
 
 @mcp.tool(annotations=_RO)
-def waver_values(
+def peeper_values(
     file: str,
     signal: str,
     start: str | int = "0",
@@ -179,7 +179,7 @@ def waver_values(
     is [start, end) — omit end to run to the signal's last change.
     Wide (>= 32 bit) values are shown in hex; X/Z samples and enum/
     string values are kept as-is. For statistics instead of a change
-    list, use waver_analyze; for one time point, waver_value_at.
+    list, use peeper_analyze; for one time point, peeper_value_at.
     """
     error = _open(file)
     if error is not None:
@@ -232,13 +232,13 @@ def waver_values(
         lines.append(
             f"truncated after {shown} changes — narrow the window "
             "(start='...' / end='...') or raise max_changes; "
-            "for statistics use waver_analyze"
+            "for statistics use peeper_analyze"
         )
     return "\n".join(lines)
 
 
 @mcp.tool(annotations=_RO)
-def waver_value_at(file: str, time: str | int, signals: list[str]) -> str:
+def peeper_value_at(file: str, time: str | int, signals: list[str]) -> str:
     """What were these signals at this exact time?
 
     Answers "what was <signal> at 10ns?" (batch: pass several signals in
@@ -246,7 +246,7 @@ def waver_value_at(file: str, time: str | int, signals: list[str]) -> str:
     at or before the time). Time is human-readable ('10ns') or integer
     file ticks. If the time is past the end of the file, the last
     recorded value is returned and flagged. For a whole window of
-    changes, use waver_values.
+    changes, use peeper_values.
     """
     error = _open(file)
     if error is not None:
@@ -275,7 +275,7 @@ def waver_value_at(file: str, time: str | int, signals: list[str]) -> str:
 
 
 @mcp.tool(annotations=_RO)
-def waver_analyze(
+def peeper_analyze(
     file: str, signal: str, start: str | int = "0", end: str | int | None = None
 ) -> str:
     """How fast, how long, how much is this signal?
@@ -286,8 +286,8 @@ def waver_analyze(
     statistics tool: it summarizes a window instead of listing changes.
     Times are human-readable ('10ns') or integer ticks; the window is
     [start, end) — omit end to run to the signal's last change. For a raw
-    change list use waver_values; for edge-to-edge timing between two
-    signals use waver_latency.
+    change list use peeper_values; for edge-to-edge timing between two
+    signals use peeper_latency.
     """
     error = _open(file)
     if error is not None:
@@ -346,7 +346,7 @@ def waver_analyze(
 
 
 @mcp.tool(annotations=_RO)
-def waver_latency(
+def peeper_latency(
     file: str,
     a: str,
     b: str,
@@ -362,7 +362,7 @@ def waver_latency(
     reports min/max/mean/p50/stddev over all such pairs, plus the first
     and last pairs. edge='rise' needs both signals to be binary (0/1);
     use edge='any' for any change. Times are human-readable or ticks.
-    For one signal's own timing use waver_analyze.
+    For one signal's own timing use peeper_analyze.
     """
     error = _open(file)
     if error is not None:
@@ -474,7 +474,7 @@ def waver_latency(
 
 
 @mcp.tool(annotations=_RO)
-def waver_find(
+def peeper_find(
     file: str, signal: str, value: str | int, start: str | int = "0", limit: int = 100
 ) -> str:
     """When was the signal equal to this value?
@@ -484,8 +484,8 @@ def waver_find(
     ('0x1f'); string/enum signals match case-insensitively; on logic
     vectors 'x' or 'z' matches an all-X/all-Z bus. Returns each interval
     the value is held, with its duration, from `start` onwards. For a
-    single time point use waver_value_at; for statistics use
-    waver_analyze.
+    single time point use peeper_value_at; for statistics use
+    peeper_analyze.
     """
     error = _open(file)
     if error is not None:
@@ -689,7 +689,7 @@ def _draw_plot_lane(
 
 
 @mcp.tool(annotations=_RO)
-def waver_plot(
+def peeper_plot(
     file: str,
     signals: list[str],
     start: str | int = "0",
@@ -706,7 +706,7 @@ def waver_plot(
     Dense signals are decimated to ~10000 points so large files stay fast.
     Returns the plot as an image plus a text summary; the PNG is also
     written to a temp file whose path is in the summary. For statistics
-    use waver_analyze; for exact values use waver_values.
+    use peeper_analyze; for exact values use peeper_values.
     """
     error = _open(file)
     if error is not None:
@@ -768,10 +768,10 @@ def waver_plot(
         global _last_plot_path
         if _last_plot_path is not None:
             # Best-effort: remove the previous call's temp PNG so a long
-            # session doesn't accumulate one file per waver_plot call.
+            # session doesn't accumulate one file per peeper_plot call.
             with contextlib.suppress(OSError):
                 os.remove(_last_plot_path)
-        fd, png_path = tempfile.mkstemp(prefix="waver-plot-", suffix=".png")
+        fd, png_path = tempfile.mkstemp(prefix="peeper-plot-", suffix=".png")
         os.close(fd)
         _last_plot_path = png_path
         fig.savefig(png_path, format="png", dpi=100, bbox_inches="tight")
@@ -789,7 +789,7 @@ def waver_plot(
             note = f"  (matched {res.signal.leaf!r})" if res.note else ""
             lines.append(f"  {res.signal.full_name}{note}  {summary}")
         lines.append(
-            "stats: waver_analyze; exact values: waver_values; narrow the"
+            "stats: peeper_analyze; exact values: peeper_values; narrow the"
             " window to read dense labels"
         )
         return (
@@ -814,7 +814,7 @@ _INT_RE = re.compile(r"-?\d+")
 
 
 def _parse_target(value: str | int, info: SignalInfo) -> int | str:
-    """Parse a waver_find target: int stays int, hex/decimal strings
+    """Parse a peeper_find target: int stays int, hex/decimal strings
     become ints, everything else stays a string. 'x'/'z' on a logic
     vector expands to the full-width all-X/all-Z pattern."""
     if isinstance(value, int):

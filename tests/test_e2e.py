@@ -1,6 +1,6 @@
-"""End-to-end tests: a real MCP client against waver-mcp over stdio.
+"""End-to-end tests: a real MCP client against peeper-mcp over stdio.
 
-Spawns the actual server process (python -m waver_mcp) and walks the
+Spawns the actual server process (python -m peeper_mcp) and walks the
 tools over the wire, exactly as an MCP client (Claude, IDE, ...) would.
 """
 
@@ -13,19 +13,19 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 EXPECTED_TOOLS = {
-    "waver_open",
-    "waver_search",
-    "waver_values",
-    "waver_value_at",
-    "waver_analyze",
-    "waver_latency",
-    "waver_find",
-    "waver_plot",
+    "peeper_open",
+    "peeper_search",
+    "peeper_values",
+    "peeper_value_at",
+    "peeper_analyze",
+    "peeper_latency",
+    "peeper_find",
+    "peeper_plot",
 }
 
 
 def _server() -> StdioServerParameters:
-    return StdioServerParameters(command=sys.executable, args=["-m", "waver_mcp"])
+    return StdioServerParameters(command=sys.executable, args=["-m", "peeper_mcp"])
 
 
 def _text(result: object) -> str:
@@ -45,20 +45,20 @@ class TestE2E:
             tools = await session.list_tools()
             assert {t.name for t in tools.tools} == EXPECTED_TOOLS
 
-            out = _text(await session.call_tool("waver_open", {"file": file}))
+            out = _text(await session.call_tool("peeper_open", {"file": file}))
             assert "duration:  995ns" in out
             assert "timescale: 1fs per tick" in out
 
             out = _text(
                 await session.call_tool(
-                    "waver_search", {"file": file, "pattern": "clk"}
+                    "peeper_search", {"file": file, "pattern": "clk"}
                 )
             )
             assert "tb_wave.clk" in out
 
             out = _text(
                 await session.call_tool(
-                    "waver_values",
+                    "peeper_values",
                     {
                         "file": file,
                         "signal": "clk",
@@ -72,7 +72,7 @@ class TestE2E:
 
             out = _text(
                 await session.call_tool(
-                    "waver_value_at",
+                    "peeper_value_at",
                     {"file": file, "time": "12ns", "signals": ["clk", "state"]},
                 )
             )
@@ -81,7 +81,7 @@ class TestE2E:
 
             out = _text(
                 await session.call_tool(
-                    "waver_analyze", {"file": file, "signal": "clk"}
+                    "peeper_analyze", {"file": file, "signal": "clk"}
                 )
             )
             assert "period:   10ns" in out
@@ -89,7 +89,7 @@ class TestE2E:
 
             out = _text(
                 await session.call_tool(
-                    "waver_find",
+                    "peeper_find",
                     {"file": file, "signal": "state", "value": "run"},
                 )
             )
@@ -97,7 +97,7 @@ class TestE2E:
 
             out = _text(
                 await session.call_tool(
-                    "waver_latency",
+                    "peeper_latency",
                     {
                         "file": file,
                         "a": "clk",
@@ -110,7 +110,7 @@ class TestE2E:
             assert "pairs:    20" in out
 
             res = await session.call_tool(
-                "waver_plot", {"file": file, "signals": ["clk", "state"]}
+                "peeper_plot", {"file": file, "signals": ["clk", "state"]}
             )
             assert not res.is_error
             assert [c.type for c in res.content] == ["text", "image"]
@@ -123,6 +123,6 @@ class TestE2E:
         ):
             await session.initialize()
             out = _text(
-                await session.call_tool("waver_open", {"file": "/nonexistent/x.fst"})
+                await session.call_tool("peeper_open", {"file": "/nonexistent/x.fst"})
             )
             assert "not found" in out

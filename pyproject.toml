@@ -1,5 +1,5 @@
 [project]
-name = "waver-mcp"
+name = "peeper-mcp"
 version = "0.1.0"
 description = "MCP server for measuring FST waveforms: signal values, period/duty, latency, event search, PNG plots"
 readme = "README.md"
@@ -26,7 +26,7 @@ dependencies = [
     "pywellen==0.25.6",
     # Vectorized analysis over packed (time, value) change lists.
     "numpy>=1.26",
-    # Headless PNG rendering for waver_plot.
+    # Headless PNG rendering for peeper_plot.
     "matplotlib>=3.8",
 ]
 
@@ -35,7 +35,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-waver-mcp = "waver_mcp.server:main"
+peeper-mcp = "peeper_mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

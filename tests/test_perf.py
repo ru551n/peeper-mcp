@@ -1,7 +1,7 @@
 """Performance-gate tests (opt-in: `pytest -m perf`).
 
 Budgets for the ~400k-change bench fixture, Linux CI runner:
-cold open < 100 ms, warm waver_values < 20 ms, warm waver_analyze
+cold open < 100 ms, warm peeper_values < 20 ms, warm peeper_analyze
 < 50 ms. The budgets are 5-10x looser than measured so the gate only
 fires on regressions, not machine-to-machine noise. Locally, run
 `uv run python tools/bench.py tests/fixtures/bench.fst` for a
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from waver_mcp.server import waver_analyze, waver_open, waver_values
-from waver_mcp.store import FileStore
+from peeper_mcp.server import peeper_analyze, peeper_open, peeper_values
+from peeper_mcp.store import FileStore
 
 pytestmark = [
     pytest.mark.perf,
@@ -47,13 +47,13 @@ def test_cold_open_budget(bench_path: Path) -> None:
 
 def test_warm_values_budget(bench_path: Path) -> None:
     path = str(bench_path)
-    waver_open(path)  # warmup: open file + decode clk once
-    ms = _best(lambda: waver_values(path, "clk", start="1ms", end="1.001ms"))
-    assert ms < 20, f"warm waver_values took {ms:.1f} ms (budget 20 ms)"
+    peeper_open(path)  # warmup: open file + decode clk once
+    ms = _best(lambda: peeper_values(path, "clk", start="1ms", end="1.001ms"))
+    assert ms < 20, f"warm peeper_values took {ms:.1f} ms (budget 20 ms)"
 
 
 def test_warm_analyze_budget(bench_path: Path) -> None:
     path = str(bench_path)
-    waver_open(path)
-    ms = _best(lambda: waver_analyze(path, "clk"))
-    assert ms < 50, f"warm waver_analyze took {ms:.1f} ms (budget 50 ms)"
+    peeper_open(path)
+    ms = _best(lambda: peeper_analyze(path, "clk"))
+    assert ms < 50, f"warm peeper_analyze took {ms:.1f} ms (budget 50 ms)"

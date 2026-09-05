@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bench the waver tools on a waveform file.
+"""Bench the peeper tools on a waveform file.
 
 Usage:
     uv run python tools/bench.py PATH [SIGNAL]
@@ -15,15 +15,15 @@ import statistics
 import sys
 import time
 
-from waver_mcp.server import (
-    waver_analyze,
-    waver_find,
-    waver_latency,
-    waver_open,
-    waver_plot,
-    waver_values,
+from peeper_mcp.server import (
+    peeper_analyze,
+    peeper_find,
+    peeper_latency,
+    peeper_open,
+    peeper_plot,
+    peeper_values,
 )
-from waver_mcp.store import FileStore
+from peeper_mcp.store import FileStore
 
 
 def bench(name: str, fn: object, runs: int = 5) -> None:
@@ -52,18 +52,18 @@ def main() -> None:
     bench("open (cold)", lambda: fresh.open(path), runs=1)
 
     # Warm: the server-level LRU already holds the file + packed signal.
-    bench("waver_open", lambda: waver_open(path))
+    bench("peeper_open", lambda: peeper_open(path))
     bench(
-        "waver_values (window)",
-        lambda: waver_values(path, signal, start="1ms", end="1.001ms"),
+        "peeper_values (window)",
+        lambda: peeper_values(path, signal, start="1ms", end="1.001ms"),
     )
-    bench("waver_analyze (full)", lambda: waver_analyze(path, signal))
+    bench("peeper_analyze (full)", lambda: peeper_analyze(path, signal))
     bench(
-        "waver_latency (self)",
-        lambda: waver_latency(path, signal, signal, edge="rise"),
+        "peeper_latency (self)",
+        lambda: peeper_latency(path, signal, signal, edge="rise"),
     )
-    bench("waver_find", lambda: waver_find(path, signal, 1))
-    bench("waver_plot (full)", lambda: waver_plot(path, [signal]))
+    bench("peeper_find", lambda: peeper_find(path, signal, 1))
+    bench("peeper_plot (full)", lambda: peeper_plot(path, [signal]))
 
 
 if __name__ == "__main__":

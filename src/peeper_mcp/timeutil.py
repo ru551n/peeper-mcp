@@ -1,6 +1,6 @@
 """Simulation-time parsing and formatting.
 
-waver-mcp tools accept times as human-readable strings (``"10ns"``,
+peeper-mcp tools accept times as human-readable strings (``"10ns"``,
 ``"1.5us"``) or as bare integers (ticks of the file's timescale). This
 module converts between the two against a file's timescale, so callers
 never have to reason about raw tick counts.

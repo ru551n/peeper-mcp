@@ -1,4 +1,4 @@
-"""Tests for waver_mcp.store (file store, resolution, packed caches)."""
+"""Tests for peeper_mcp.store (file store, resolution, packed caches)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from waver_mcp.store import (
+from peeper_mcp.store import (
     AmbiguousSignal,
     FileStore,
     SignalInfo,

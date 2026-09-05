@@ -15,12 +15,18 @@ dependencies = [
     # time (works, but needs a Rust toolchain + the MSVC linker on the
     # installing machine and takes ~1 minute). To spare Windows installs
     # that, we build a win_amd64 wheel ourselves from the *unmodified*
-    # PyPI sdist (see .github/workflows/build-pywellen-wheels.yml, run
-    # manually whenever this pin changes) and pull it in directly for
-    # the versions we test in CI; any other combo (macOS, Linux, or a
-    # Python version we haven't built) falls back to the official PyPI
-    # package, which still builds cleanly from source on Windows if ever
-    # needed for an untested Python version.
+    # PyPI sdist and pull it in directly for the versions we test in CI;
+    # any other combo (macOS, Linux, or a Python version we haven't
+    # built) falls back to the official PyPI package, which still
+    # builds cleanly from source on Windows if ever needed for an
+    # untested Python version.
+    #
+    # Renovate bumps the version pin below on its own; it doesn't
+    # understand the direct-URL deps, so .github/workflows/
+    # build-pywellen-wheels.yml runs on every PR touching this file,
+    # builds a matching Windows wheel if one doesn't exist yet, and
+    # pushes a follow-up commit repointing the URLs at it -- no manual
+    # step needed.
     "pywellen==0.25.6 ; sys_platform != 'win32' or python_version not in '3.12 3.13 3.14'",
     "pywellen @ https://github.com/ru551n/waver-mcp/releases/download/pywellen-wheels-v0.25.6/pywellen-0.25.6-cp312-cp312-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.12'",
     "pywellen @ https://github.com/ru551n/waver-mcp/releases/download/pywellen-wheels-v0.25.6/pywellen-0.25.6-cp313-cp313-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.13'",

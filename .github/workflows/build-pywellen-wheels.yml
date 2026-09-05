@@ -5,26 +5,78 @@ name: Build pywellen wheels (Windows)
 # sdist via maturin/cargo at install time, which requires a Rust
 # toolchain + the MSVC linker on the installing machine (see README).
 #
-# This workflow builds a prebuilt win_amd64 wheel from the *unmodified*
-# sdist published on PyPI -- no fork or patch of wellen's source, just a
-# `pip wheel` run on a windows-latest runner (which already has Rust +
-# MSVC preinstalled) -- and attaches it to a GitHub Release in this repo.
-# Run manually whenever pyproject.toml's pywellen pin changes, then wire
-# the resulting release asset URLs into pyproject.toml.
+# Renovate tracks and bumps the plain `pywellen==X.Y.Z ; ...` version pin
+# in pyproject.toml on its own (it doesn't understand the direct-URL
+# wheel deps below that one, so it leaves those alone). This workflow
+# runs on every PR that touches pyproject.toml -- which covers every
+# Renovate PR automatically -- reads whatever version is now pinned,
+# and if we haven't already built a Windows wheel for it:
+#   1. builds win_amd64 wheels (py3.12/3.13/3.14) from the *unmodified*
+#      sdist published on PyPI (no fork or patch of wellen's source),
+#   2. attaches them to a GitHub Release in this repo, and
+#   3. pushes a follow-up commit onto the SAME PR branch that repoints
+#      the Windows wheel URLs at the new release and refreshes uv.lock.
+# So a Renovate pywellen bump becomes self-healing: by the time its PR
+# is mergeable, every platform (Windows included) is on the new pin with
+# a matching prebuilt wheel.
+#
+# workflow_dispatch is kept for manual/backfill runs (e.g. bootstrapping
+# a version that predates this workflow).
 
 on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       version:
-        description: "pywellen version to build (must exist as an sdist on PyPI)"
-        required: true
+        description: "pywellen version to build (defaults to the pin in pyproject.toml)"
+        required: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: build-pywellen-wheels-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
+  detect:
+    name: Detect target version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      needs_build: ${{ steps.parse.outputs.needs_build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+      - name: Parse the pinned pywellen version and check for an existing release
+        id: parse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(grep -oP 'pywellen==\K[0-9.]+' pyproject.toml | head -1)
+          fi
+          if [ -z "$version" ]; then
+            echo "Could not find a pywellen==X.Y.Z pin in pyproject.toml" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "pywellen-wheels-v$version" >/dev/null 2>&1; then
+            echo "pywellen-wheels-v$version already exists, nothing to build"
+            echo "needs_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build wheel (py${{ matrix.python-version }})
+    needs: detect
+    if: needs.detect.outputs.needs_build == 'true'
     runs-on: windows-latest
     strategy:
       matrix:
@@ -36,31 +88,60 @@ jobs:
       - name: Build wheel from the unmodified PyPI sdist
         run: |
           python -m pip install --upgrade pip
-          pip wheel --no-deps --no-binary pywellen -w dist "pywellen==${{ inputs.version }}"
+          pip wheel --no-deps --no-binary pywellen -w dist "pywellen==${{ needs.detect.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-py${{ matrix.python-version }}
           path: dist/*.whl
 
-  release:
-    name: Publish release
-    needs: build
+  publish:
+    name: Publish release and repoint pyproject.toml
+    needs: [detect, build]
+    if: needs.detect.outputs.needs_build == 'true'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: Create/update GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pywellen-wheels-v${{ inputs.version }}
-          name: "pywellen ${{ inputs.version }} Windows wheels"
+          tag_name: pywellen-wheels-v${{ needs.detect.outputs.version }}
+          name: "pywellen ${{ needs.detect.outputs.version }} Windows wheels"
           body: |
-            Prebuilt Windows (win_amd64) wheels for `pywellen==${{ inputs.version }}`,
+            Prebuilt Windows (win_amd64) wheels for `pywellen==${{ needs.detect.outputs.version }}`,
             built from the unmodified sdist published on PyPI via maturin/cargo on a
             `windows-latest` GitHub Actions runner. Not affiliated with upstream
             [ekiwi/wellen](https://github.com/ekiwi/wellen); built solely to spare
             Windows installs of this project from needing a local Rust toolchain.
-            See the README for details.
+            Auto-published when the pywellen pin in pyproject.toml changed
+            (via Renovate or a manual bump). See the README for details.
           files: dist/*.whl
+      - name: Repoint the Windows wheel URLs at the new release
+        id: repoint
+        run: |
+          old=$(grep -oP 'pywellen-wheels-v\K[0-9.]+' pyproject.toml | head -1)
+          new="${{ needs.detect.outputs.version }}"
+          if [ "$old" = "$new" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sed -i "/pywellen/s/$old/$new/g" pyproject.toml
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@v10.0.1
+        if: steps.repoint.outputs.changed == 'true'
+      - name: Refresh uv.lock
+        if: steps.repoint.outputs.changed == 'true'
+        run: uv lock
+      - name: Commit and push the fixup
+        if: steps.repoint.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          git commit -m "build: point Windows pywellen wheels at v${{ needs.detect.outputs.version }}"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}"

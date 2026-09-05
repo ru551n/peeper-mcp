@@ -9,22 +9,13 @@ dependencies = [
     # FastMCP (mcp.server.fastmcp) was removed in mcp 2.x — pin to 1.x.
     "mcp>=2.1,<3",
     "pydantic>=2.12",
-    # Rust bindings for the wellen FST/VCD reader. Upstream (PyPI) only
-    # ships prebuilt wheels for macOS and Linux, with NO WINDOWS WHEELS.
-    # We build cp3.12/3.13/3.14 Linux + Windows wheels ourselves from a
-    # fork (github.com/ru551n/wellen, synced with upstream, wheels
-    # attached to GitHub Releases -- not published to PyPI) and pull
-    # those in directly for the versions/platforms we test in CI; any
-    # other combo (macOS, or a Python version we haven't built) falls
-    # back to the official PyPI package, which still has to be built
-    # from source via maturin/cargo on Windows for those combos.
-    "pywellen==0.25.6 ; sys_platform == 'darwin' or python_version not in '3.12 3.13 3.14'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and python_version == '3.12'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and python_version == '3.13'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and python_version == '3.14'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp312-cp312-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.12'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp313-cp313-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.13'",
-    "pywellen @ https://github.com/ru551n/wellen/releases/download/v0.25.6/pywellen-0.25.6-cp314-cp314-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.14'",
+    # Rust bindings for the wellen FST/VCD reader. Upstream (PyPI) ships
+    # prebuilt wheels for Linux and macOS only. On Windows there is no
+    # prebuilt wheel, so pip/uv build it from the sdist via maturin/cargo
+    # instead -- this requires a Rust toolchain + the MSVC linker on the
+    # installing machine, but works out of the box (confirmed in CI,
+    # ~1 minute build). No fork or custom wheel-building needed.
+    "pywellen==0.25.6",
     # Vectorized analysis over packed (time, value) change lists.
     "numpy>=1.26",
     # Headless PNG rendering for waver_plot.

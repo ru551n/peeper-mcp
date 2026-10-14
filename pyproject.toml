@@ -23,7 +23,7 @@ dependencies = [
     # on Windows without a Rust toolchain (see README) -- we don't
     # consume it ourselves here, so our own installs/CI always build and
     # test against the same unmodified PyPI sdist as every other platform.
-    "pywellen==0.25.6",
+    "pywellen==0.25.7",
     # Vectorized analysis over packed (time, value) change lists.
     "numpy>=1.26",
     # Headless PNG rendering for peeper_plot.

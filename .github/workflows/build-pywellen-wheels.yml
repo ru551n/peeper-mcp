@@ -83,14 +83,14 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Build wheel from the unmodified PyPI sdist
         run: |
           python -m pip install --upgrade pip
           pip wheel --no-deps --no-binary pywellen -w dist "pywellen==${{ needs.detect.outputs.version }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-py${{ matrix.python-version }}
           path: dist/*.whl
@@ -101,12 +101,12 @@ jobs:
     if: needs.detect.outputs.needs_build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: pywellen-wheels-v${{ needs.detect.outputs.version }}
           name: "pywellen ${{ needs.detect.outputs.version }} Windows wheels"
